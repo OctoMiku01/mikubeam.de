@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mikubeam",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+  // Files in public/ (avatar, background, favicon, ...) are served directly.
+  // Everything else – including "/" – is handled by the worker.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  // Custom domain: the zone mikubeam.de must be on Cloudflare; DNS record and certificate are created on deploy.
+  "routes": [{ "pattern": "mikubeam.de", "custom_domain": true }]
+}

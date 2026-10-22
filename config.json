@@ -1,0 +1,133 @@
+{
+  "name": "OctoMiku",
+  "handle": "@OctoMiku01",
+  "bio": "Loves Miku and Vocaloid. PC + Nintendo Switch 2",
+  "avatar": "https://github.com/OctoMiku01.png",
+  "meta": {
+    "title": "OctoMiku01",
+    "description": "OctoMiku01's Links",
+    "siteName": "mikubeam.de",
+    "image": "",
+    "themeColor": "",
+    "lang": "en"
+  },
+  "theme": {
+    "text": "#ffffff",
+    "accent": "#39c5bb",
+    "buttonStyle": "glass",
+    "radius": "14px",
+    "font": "Inter"
+  },
+  "animation": {
+    "loader": true,
+    "entrance": true,
+    "minDuration": 700,
+    "maxDuration": 4000
+  },
+  "background": {
+    "color": "#0f1724",
+    "gradient": "linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)",
+    "image": "/bg.jpg",
+    "blur": 3,
+    "dim": 0.5
+  },
+  "socials": [
+    {
+      "icon": "github",
+      "url": "https://github.com/OctoMiku01",
+      "label": "GitHub"
+    },
+    {
+      "icon": "x",
+      "url": "https://x.com/OctoMiku01",
+      "label": "X"
+    },
+    {
+      "icon": "reddit",
+      "url": "https://www.reddit.com/user/OctoMiku01/",
+      "label": "Reddit"
+    },
+    {
+      "icon": "/icons/vrchat.svg",
+      "url": "https://vrchat.com/home/user/usr_771d461e-a7f5-4b7f-9a23-c6f921741644",
+      "label": "VRChat"
+    }
+  ],
+  "links": [
+    {
+      "type": "header",
+      "label": "Projects"
+    },
+    {
+      "label": "Voxy LOD Gen",
+      "description": "Pre-Generated LODs for Voxy",
+      "url": "https://github.com/OctoMiku01/Voxy-LOD-Gen",
+      "icon": "github"
+    },
+    {
+      "type": "header",
+      "label": "Misc"
+    },
+    {
+      "label": "VRChat",
+      "url": "https://vrchat.com/home/user/usr_771d461e-a7f5-4b7f-9a23-c6f921741644",
+      "icon": "/icons/vrchat.svg"
+    },
+    {
+      "label": "Discord",
+      "url": "https://discord.gg/gaYppzkzYm",
+      "icon": "discord"
+    },
+    {
+      "label": "Fluxer",
+      "url": "https://fluxer.gg/drf0ZaKR",
+      "icon": "fluxer"
+    },
+    {
+      "label": "Reddit",
+      "url": "https://reddit.com/user/OctoMiku01",
+      "icon": "reddit"
+    },
+    {
+      "label": "X",
+      "url": "https://x.com/OctoMiku01",
+      "icon": "x"
+    },
+    {
+      "label": "Steam",
+      "url": "https://steamcommunity.com/id/OctoMiku01/",
+      "icon": "steam"
+    },
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com/@OctoMiku01",
+      "icon": "youtube"
+    },
+    {
+      "label": "YouTube Music",
+      "url": "https://music.youtube.com/@OctoMiku01",
+      "icon": "youtubemusic"
+    },
+    {
+      "label": "TikTok",
+      "url": "https://www.tiktok.com/@octomiku01",
+      "icon": "tiktok"
+    },
+    {
+      "label": "Twitch",
+      "url": "https://www.twitch.tv/OctoMiku01",
+      "icon": "twitch"
+    },
+    {
+      "label": "Nintendo Switch Profile",
+      "url": "https://nxapi-auth.fancy.org.uk/@OctoMiku01",
+      "icon": "/icons/nintendo.svg"
+    },
+    {
+      "label": "Medal",
+      "url": "https://medal.tv/users/OctoMiku01",
+      "icon": "/icons/medal.png"
+    }
+  ],
+  "footer": "© mikubeam.de"
+}
