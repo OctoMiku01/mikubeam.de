@@ -71,12 +71,6 @@
       "icon": "github"
     },
     {
-      "label": "Stellarity Pearl Restore",
-      "description": "Fabric addon for Stellarity that makes Endermen drop Ender Pearls again instead of Chorus Fruit",
-      "url": "https://github.com/OctoMiku01/Stellarity-Pearl-Restore",
-      "icon": "github"
-    },
-    {
       "type": "header",
       "label": "Misc"
     },
