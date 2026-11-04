@@ -16,6 +16,10 @@ export default {
         },
       });
     }
+    // Browsers and crawlers request /favicon.ico on their own; point them at the PNG.
+    if (pathname === "/favicon.ico") {
+      return Response.redirect(`${origin}/favicon-32.png`, 301);
+    }
     // Static files from public/ never reach the worker, so anything else is a 404.
     return new Response("Not Found", { status: 404 });
   },
@@ -156,7 +160,12 @@ function renderPage(c, origin) {
   <meta property="og:description" content="${esc(description)}">
   ${ogImage ? `<meta property="og:image" content="${esc(absoluteUrl(ogImage, origin))}">` : ""}
   <meta name="twitter:card" content="${meta.image ? "summary_large_image" : "summary"}">
-  ${c.avatar ? `<link rel="icon" href="${esc(safeUrl(c.avatar))}">` : ""}
+  ${meta.image ? `<meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:image" content="${esc(absoluteUrl(meta.image, origin))}">` : ""}
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   ${font ? `<link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}:wght@400;500;700&display=swap">` : ""}

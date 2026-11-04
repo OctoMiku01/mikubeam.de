@@ -7,7 +7,7 @@
     "title": "OctoMiku01",
     "description": "OctoMiku01's Links",
     "siteName": "mikubeam.de",
-    "image": "",
+    "image": "/banner.jpg",
     "themeColor": "",
     "lang": "en"
   },
@@ -68,6 +68,34 @@
       "label": "Mod Synchronizer",
       "description": "Keep your mods in sync with a shared mod list, downloading from Modrinth and GitHub",
       "url": "https://github.com/OctoMiku01/Mod-Synchronizer",
+      "icon": "github"
+    },
+    {
+      "label": "Happy Ghast Speed",
+      "description": "Happy Ghasts fly faster while ridden and drift slower when idle",
+      "url": "https://github.com/OctoMiku01/Happy-Ghast-Speed",
+      "icon": "github"
+    },
+    {
+      "type": "header",
+      "label": "Ports"
+    },
+    {
+      "label": "Your Reputation",
+      "description": "Jade/WTHIT plugin that shows your reputation with each villager",
+      "url": "https://github.com/OctoMiku01/your-reputation",
+      "icon": "github"
+    },
+    {
+      "label": "Illager Invasion",
+      "description": "The illagers are back! New foes to fight",
+      "url": "https://github.com/OctoMiku01/illager-invasion",
+      "icon": "github"
+    },
+    {
+      "label": "Miku Plushie",
+      "description": "Hatsune Miku plushies in Minecraft, now with a wander mode",
+      "url": "https://github.com/OctoMiku01/miku-plushie-mod",
       "icon": "github"
     },
     {
