@@ -108,9 +108,10 @@ const tree = h(
       h("div", { display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0 }, [
         h("div", { fontSize: 68, fontWeight: 800, letterSpacing: -1.5, lineHeight: 1, textShadow: shadow }, meta.title || config.name),
         subtitle.length &&
-          h("div", { display: "flex", flexWrap: "wrap", marginTop: 12, fontSize: 28, fontWeight: 500, lineHeight: 1.3, textShadow: "0 2px 10px rgba(0,0,0,0.5)" }, [
-            meta.siteName && h("span", { color: lighten(accent, 0.25), fontWeight: 800 }, meta.siteName),
-            bio && h("span", { opacity: 0.92 }, `${meta.siteName ? " · " : ""}${bio}`),
+          // Site name and bio on their own lines, so a longer bio can wrap cleanly.
+          h("div", { display: "flex", flexDirection: "column", marginTop: 14, fontWeight: 500, lineHeight: 1.25, textShadow: "0 2px 10px rgba(0,0,0,0.5)" }, [
+            meta.siteName && h("div", { color: lighten(accent, 0.25), fontWeight: 800, fontSize: 30 }, meta.siteName),
+            bio && h("div", { fontSize: 34, opacity: 0.95, marginTop: 4 }, bio),
           ].filter(Boolean)),
       ].filter(Boolean)),
     ].filter(Boolean)),
