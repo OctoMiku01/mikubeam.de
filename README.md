@@ -61,6 +61,6 @@ Alternativ: Repo im Cloudflare-Dashboard unter *Workers & Pages → Create → I
 
 ### Eigene Bilder
 
-Favicon: `public/favicon-32.png`, `public/favicon.png` (192 px) und `public/apple-touch-icon.png` (180 px), `/favicon.ico` leitet auf die 32-px-Datei um. Embed-Banner: `public/banner.jpg` (1200×630).
+Favicon: `public/favicon.png` (192 px) und `public/apple-touch-icon.png` (180 px, für iOS), `/favicon.ico` leitet auf `favicon.png` um. Embed-Banner: `public/banner.jpg` (1200×630).
 
 Dateien einfach in `public/` legen (z. B. `public/avatar.png`, `public/bg.jpg`) und in der Config mit `/avatar.png` bzw. `/bg.jpg` referenzieren.
