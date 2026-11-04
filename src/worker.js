@@ -177,6 +177,107 @@ function inkFor(hex) {
   return luminance > 0.5 ? "#1b1b1b" : "#ffffff";
 }
 
+// Pixel art leek for the easter egg (diagonal, black outline): one character per pixel, "." is transparent.
+const LEEK_PIXELS = [
+  "................K....KK....",
+  "...............KDK..KGDK...",
+  "..............KGDK.KHGK....",
+  "..............KGDKKHGK.....",
+  "..............KDDKKGDK...K.",
+  "..............KDKKHGK..KKHK",
+  ".............KGDKHGDKKKHGDK",
+  ".............KGDHGGKKHHGDK.",
+  ".............KGHHGDHHGGKK..",
+  "............KGDHGHHGGDKKKK.",
+  "............KGHGHHGGDKGGGDK",
+  "............KHHHGGDDDDDDKK.",
+  "...........KLLGGGDDDDDKK...",
+  "..........KYYLLGDDDKKK.....",
+  ".........KVYYYGGKKK........",
+  "........KVWWYYLK...........",
+  ".......KVWWWWLK............",
+  "......KVWWWWSK.............",
+  ".....KVWWWWSK..............",
+  "....KVWWWWSK...............",
+  "...KVWWWWSK................",
+  "..KVWWWWSK.................",
+  ".KVWWWWSK..................",
+  "KEEWWWSK...................",
+  "KEEEWSK....................",
+  "KEEEEK.....................",
+  ".KEEK......................",
+  "..KK.......................",
+];
+// Miku-style negi (long green onion): slim, long, three leaf tips and a root tuft.
+const NEGI_PIXELS = [
+  "...........................K......",
+  "..........................KDK...K.",
+  "..........................KDK..KGK",
+  ".........................KGDKKKGK.",
+  ".........................KDKKHGDK.",
+  "........................KGDKHGDK..",
+  "........................KGDHGDK.K.",
+  "........................KDHGDKKKGK",
+  ".......................KGHGDKGDDDK",
+  ".......................KHGGGDDKKK.",
+  "......................KHGGDDKK....",
+  ".....................KHGGDKK......",
+  "....................KHGGDK........",
+  "...................KHGGDK.........",
+  "..................KHGGDK..........",
+  ".................KHGGDK...........",
+  "...............KKHGGDK............",
+  "..............KLLGGDK.............",
+  ".............KYLLLDK..............",
+  "............KYYYLGGK..............",
+  "...........KVVYYLGK...............",
+  "..........KVVWWLLK................",
+  ".........KVVWWSSK.................",
+  "........KVVWWSSK..................",
+  ".......KVVWWSSK...................",
+  "......KVVWWSSK....................",
+  ".....KVVWWSSK.....................",
+  "....KVVWWSSK......................",
+  "...KVVWWSSK.......................",
+  "..KVVWWSSK........................",
+  ".KEEWWSSK.........................",
+  ".KEEESSK..........................",
+  "RREEEEK...........................",
+  ".RRRKK............................",
+  ".R.R..............................",
+  "..R...............................",
+];
+const LEEK_COLORS = {
+  K: "#141414", // outline
+  D: "#1d6a2b", // dark leaf green
+  G: "#2f9a3c", // leaf green
+  H: "#5cc552", // leaf highlight
+  L: "#9fdc4a", // lime band
+  Y: "#d8f1b2", // pale green
+  W: "#eef4e6", // white stalk
+  V: "#ffffff", // stalk highlight
+  S: "#bccab0", // stalk shadow
+  E: "#e6dfc0", // cream root end
+  R: "#d9cfae", // roots
+};
+
+// Turns the pixel rows into an SVG, merging same-colored runs into one rect each.
+function pixelArtSvg(rows, colors) {
+  let rects = "";
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length;) {
+      const ch = row[x];
+      let end = x + 1;
+      while (row[end] === ch) end++;
+      if (colors[ch]) rects += `<rect x="${x}" y="${y}" width="${end - x}" height="1" fill="${colors[ch]}"/>`;
+      x = end;
+    }
+  });
+  return `<svg viewBox="0 0 ${rows[0].length} ${rows.length}" shape-rendering="crispEdges" aria-hidden="true">${rects}</svg>`;
+}
+// [svg, width in px]: drawn at 2 screen pixels per pixel so the edges stay crisp.
+const LEEK_SPRITES = [LEEK_PIXELS, NEGI_PIXELS].map((rows) => [pixelArtSvg(rows, LEEK_COLORS), rows[0].length * 2]);
+
 // JSON that is safe to put inside a <script> tag.
 const jsonForScript = (value) => JSON.stringify(value).replace(/</g, "\\u003c");
 
@@ -645,11 +746,10 @@ function renderPage(c, origin, page) {
       position: fixed;
       top: -90px;
       z-index: 20;
-      width: 34px;
-      pointer-events: none;
+      pointer-events: none; /* width is set per sprite */
       animation: leek-fall var(--fall) cubic-bezier(.35, 0, .65, 1) forwards;
     }
-    .leek svg { display: block; width: 100%; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .3)); }
+    .leek svg { display: block; width: 100%; filter: drop-shadow(3px 3px 0 rgba(0, 0, 0, .3)); }
     @keyframes leek-fall {
       to { translate: var(--drift) calc(100vh + 120px); rotate: var(--spin); }
     }
@@ -775,14 +875,8 @@ function renderPage(c, origin, page) {
   ${c.easterEgg ? `<script>
     (() => {
       // Easter egg: Konami code (↑ ↑ ↓ ↓ ← → ← → B A) or three quick clicks on the avatar → leek rain + jingle.
-      const LEEK = '<svg viewBox="0 0 24 96" aria-hidden="true">'
-        + '<path d="M10.5 42C11 28 12 16 12 4c1 12 1.5 24 1.5 38z" fill="#4cbb5a"/>'
-        + '<path d="M9 42C8 26 3 14 1 2c6 8 10 22 11 38z" fill="#3fa34d"/>'
-        + '<path d="M15 42c1-16 6-28 8-40-6 8-10 22-11 38z" fill="#2e8b3e"/>'
-        + '<path d="M9 40h6v46a3 3 0 0 1-6 0z" fill="#f4f7ec"/>'
-        + '<path d="M9 40h6v14H9z" fill="#c6e5a2"/>'
-        + '<path d="M10 88l-2 5M12 89v5M14 88l2 5" stroke="#d8cfb4" stroke-width="1.2" stroke-linecap="round"/>'
-        + '</svg>';
+      // Pixel art sprites (leek and Miku-style negi), each falling one picks one at random.
+      const SPRITES = ${jsonForScript(LEEK_SPRITES)};
       let raining = false;
 
       // A short chiptune arpeggio, made on the fly with the Web Audio API (no sound file).
@@ -815,7 +909,9 @@ function renderPage(c, origin, page) {
         for (let i = 0; i < 36; i++) {
           const leek = document.createElement("div");
           leek.className = "leek";
-          leek.innerHTML = LEEK;
+          const [svg, width] = SPRITES[Math.floor(Math.random() * SPRITES.length)];
+          leek.innerHTML = svg;
+          leek.style.width = width + "px";
           leek.style.left = Math.random() * 100 + "vw";
           leek.style.setProperty("--fall", 2.2 + Math.random() * 2 + "s");
           leek.style.setProperty("--drift", (Math.random() - 0.5) * 160 + "px");
