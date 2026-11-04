@@ -1,13 +1,15 @@
 import config from "../config.json";
+import { getAllStats, linkRepo } from "./github.js";
 
 export default {
-  async fetch(request) {
+  async fetch(request, env, ctx) {
     const { pathname, origin } = new URL(request.url);
     if (request.method !== "GET" && request.method !== "HEAD") {
       return new Response("Method Not Allowed", { status: 405 });
     }
     if (pathname === "/" || pathname === "/index.html") {
-      return new Response(renderPage(config, origin), {
+      const stats = await getAllStats(config.links ?? [], env, ctx);
+      return new Response(renderPage(config, origin, stats), {
         headers: {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "public, max-age=300",
@@ -86,10 +88,44 @@ function animator() {
   return (kind = "rise") => ` data-anim="${kind}" style="--i:${index++}"`;
 }
 
-function renderLink(link, anim) {
+// 950 -> "950", 1234 -> "1.2k", 1500000 -> "1.5M"
+function compactNumber(n) {
+  if (n < 1000) return String(n);
+  const [value, unit] = n < 1e6 ? [n / 1e3, "k"] : [n / 1e6, "M"];
+  return `${value < 10 ? value.toFixed(1).replace(/\.0$/, "") : Math.round(value)}${unit}`;
+}
+
+// Small line under a project: latest version(s), stars and downloads from GitHub.
+function renderStats(stats) {
+  if (!stats) return "";
+  const parts = [];
+  const { versions } = stats;
+  if (versions.length) {
+    const mcs = versions.map((v) => v.mc).filter(Boolean);
+    if (new Set(versions.map((v) => v.version)).size === 1) {
+      // Same version for every Minecraft version: "v1.1.0 · MC 26.3 / 26.2"
+      parts.push(`<span class="chip">v${esc(versions[0].version)}${mcs.length ? ` · MC ${esc(mcs.join(" / "))}` : ""}</span>`);
+    } else {
+      // Different versions: one chip each, "v0.5.7 · MC 26.3" "v0.4.17 · MC 26.2"
+      for (const v of versions) {
+        parts.push(`<span class="chip">v${esc(v.version)}${v.mc ? ` · MC ${esc(v.mc)}` : ""}</span>`);
+      }
+    }
+  }
+  if (stats.stars > 0) {
+    parts.push(`<span class="stat" title="GitHub stars">★ ${compactNumber(stats.stars)}</span>`);
+  }
+  if (stats.downloads > 0) {
+    parts.push(`<span class="stat" title="Downloads on GitHub">↓ ${compactNumber(stats.downloads)}</span>`);
+  }
+  return parts.length ? `<span class="link-meta">${parts.join("")}</span>` : "";
+}
+
+function renderLink(link, anim, stats = {}) {
   if (link.type === "header") {
     return `<h2 class="section"${anim()}>${esc(link.label)}</h2>`;
   }
+  const repo = linkRepo(link);
   const url = safeUrl(link.url);
   const target = isExternal(url) ? ' target="_blank" rel="noopener noreferrer"' : "";
   const classes = ["link", link.highlight ? "highlight" : ""].filter(Boolean).join(" ");
@@ -98,6 +134,7 @@ function renderLink(link, anim) {
         <span class="link-text">
           <span class="link-label">${esc(link.label)}</span>
           ${link.description ? `<span class="link-desc">${esc(link.description)}</span>` : ""}
+          ${repo ? renderStats(stats[repo]) : ""}
         </span>
       </a>`;
 }
@@ -126,7 +163,7 @@ function configVersion(c) {
 }
 const CONFIG_VERSION = configVersion(config);
 
-function renderPage(c, origin) {
+function renderPage(c, origin, stats = {}) {
   const theme = c.theme ?? {};
   const bg = c.background ?? {};
   const meta = c.meta ?? {};
@@ -291,6 +328,24 @@ function renderPage(c, origin) {
     .link-text { flex: 1; display: flex; flex-direction: column; gap: 2px; }
     .link-label { font-weight: 500; }
     .link-desc { font-size: .85rem; opacity: .75; }
+    .link-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 4px 10px;
+      margin-top: 5px;
+      font-size: .75rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .link-meta .chip {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--accent) 22%, transparent);
+      border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+      font-weight: 500;
+    }
+    .link-meta .stat { opacity: .8; }
     .link:hover, .link:focus-visible { transform: scale(1.02); }
 
     /* Button styles: glass | solid | outline */
@@ -418,7 +473,7 @@ function renderPage(c, origin) {
       ${c.socials.map((s) => renderSocial(s, anim)).join("\n      ")}
     </nav>` : ""}
     <div class="links">
-      ${(c.links ?? []).map((l) => renderLink(l, anim)).join("\n      ")}
+      ${(c.links ?? []).map((l) => renderLink(l, anim, stats)).join("\n      ")}
     </div>
     ${c.footer ? `<footer${anim()}>${esc(c.footer)}</footer>` : ""}
   </main>

@@ -49,6 +49,15 @@ Alternativ: Repo im Cloudflare-Dashboard unter *Workers & Pages → Create → I
 | `links` | Buttons: `{ "label", "url", "icon", "description", "highlight" }` oder Zwischenüberschrift `{ "type": "header", "label" }` |
 | `footer` | Text ganz unten (optional) |
 
+### Projekt-Infos von GitHub
+
+Zeigt ein Link auf ein GitHub-Repo (`https://github.com/Owner/Repo`), holt der Worker automatisch die neueste Version pro Minecraft-Version, Sterne und Downloads (ohne `-sources.jar`) und zeigt sie unter der Beschreibung, z. B. `v0.5.7 · MC 26.3` `v0.4.17 · MC 26.2` `★ 1` `↓ 56`.
+
+- Die MC-Version kommt aus dem Release-Tag (`v0.5.7-26.3`), sonst aus dem Release-Namen („… Minecraft 26.3“ / „… for 26.3“) oder dem Dateinamen (`mc26.3`). Pre-Releases zählen nur bei den Downloads.
+- `"repo": "Owner/Repo"` am Link setzt das Repo von Hand, `"stats": false` schaltet die Zeile ab.
+- Die Daten werden im Cloudflare-Cache gehalten und höchstens einmal pro Stunde im Hintergrund aktualisiert. Ist GitHub nicht erreichbar, bleiben die letzten Werte (bis zu 7 Tage) stehen, ganz ohne Daten wird die Zeile einfach weggelassen.
+- **Token (empfohlen):** Ohne Anmeldung erlaubt GitHub nur 60 Anfragen pro Stunde, und die teilen sich alle Worker auf derselben Cloudflare-IP. Einen [Fine-grained Token](https://github.com/settings/personal-access-tokens/new) mit „Public repositories (read-only)“ und ohne weitere Rechte anlegen und im Cloudflare-Dashboard unter *Worker → Settings → Variables and Secrets* als Secret `GITHUB_TOKEN` eintragen. Lokal geht das über eine `.dev.vars`-Datei mit `GITHUB_TOKEN=…`.
+
 ### Icons
 
 - **Marken-Icons**: jeder Slug von [simpleicons.org](https://simpleicons.org), z. B. `github`, `discord`, `youtube`, `twitch`, `x`, `bluesky`, `instagram`, `tiktok`, `modrinth`, `curseforge`, `kofi`, `steam`
