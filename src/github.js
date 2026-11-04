@@ -4,7 +4,8 @@
 const FRESH_MS = 60 * 60 * 1000; // Refresh in the background once data is older than this.
 const KEEP_S = 7 * 24 * 60 * 60; // Keep old data this long as a fallback when GitHub is unreachable.
 const FIRST_LOAD_TIMEOUT_MS = 2500; // Without cached data, wait at most this long before rendering without stats.
-const CACHE_PREFIX = "https://cache.mikubeam.internal/github/";
+// Bump the version whenever the shape of the stored stats changes, so old entries are ignored.
+const CACHE_PREFIX = "https://cache.mikubeam.internal/github/v2/";
 
 // "https://github.com/Owner/Repo" (optionally with a trailing slash or .git) -> "Owner/Repo".
 export function repoFromUrl(url) {
@@ -44,25 +45,44 @@ const compareVersions = (a, b) => {
   return 0;
 };
 
-// Boils the API answers down to the few values the page needs.
+// The jar players actually install: not the sources/javadoc/dev builds.
+const isExtraJar = (name) => /-(sources|javadoc|dev|api)\.jar$/i.test(name);
+function mainJar(release) {
+  const jar = (release.assets ?? []).find((a) => /\.jar$/i.test(a.name) && !isExtraJar(a.name));
+  return jar ? { name: jar.name, url: jar.browser_download_url, size: jar.size } : null;
+}
+
+// Boils the API answers down to the few values the pages need.
 function summarize(repo, releases) {
   const latestPerMc = new Map();
   let downloads = 0;
+  let updatedAt = null;
   // Releases come newest first, so the first one seen per Minecraft version is its latest.
   for (const release of releases) {
     if (release.draft) continue;
     for (const asset of release.assets ?? []) {
-      if (!/-sources\.jar$/i.test(asset.name)) downloads += asset.download_count ?? 0;
+      if (!isExtraJar(asset.name)) downloads += asset.download_count ?? 0;
     }
     if (release.prerelease) continue;
+    updatedAt ??= release.published_at;
     const { version, mc } = parseRelease(release);
     const key = mc ?? "";
-    if (!latestPerMc.has(key)) latestPerMc.set(key, version);
+    if (!latestPerMc.has(key)) {
+      latestPerMc.set(key, { version, url: release.html_url, date: release.published_at, jar: mainJar(release) });
+    }
   }
   const versions = [...latestPerMc]
-    .map(([mc, version]) => ({ mc: mc || null, version }))
+    .map(([mc, info]) => ({ mc: mc || null, ...info }))
     .sort((a, b) => (a.mc && b.mc ? compareVersions(b.mc, a.mc) : 0));
-  return { stars: repo.stargazers_count ?? 0, downloads, versions };
+  return {
+    stars: repo.stargazers_count ?? 0,
+    downloads,
+    versions,
+    updatedAt,
+    description: repo.description || null,
+    license: repo.license?.spdx_id && repo.license.spdx_id !== "NOASSERTION" ? repo.license.spdx_id : null,
+    url: repo.html_url,
+  };
 }
 
 async function fetchStats(repo, env) {

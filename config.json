@@ -99,6 +99,12 @@
       "icon": "github"
     },
     {
+      "label": "All mods & downloads",
+      "description": "Every mod with a download for each Minecraft version",
+      "url": "/mods",
+      "icon": "package"
+    },
+    {
       "type": "header",
       "label": "Misc"
     },

@@ -56,6 +56,7 @@ Zeigt ein Link auf ein GitHub-Repo (`https://github.com/Owner/Repo`), holt der W
 - Die MC-Version kommt aus dem Release-Tag (`v0.5.7-26.3`), sonst aus dem Release-Namen („… Minecraft 26.3“ / „… for 26.3“) oder dem Dateinamen (`mc26.3`). Pre-Releases zählen nur bei den Downloads.
 - `"repo": "Owner/Repo"` am Link setzt das Repo von Hand, `"stats": false` schaltet die Zeile ab.
 - Die Daten werden im Cloudflare-Cache gehalten und höchstens einmal pro Stunde im Hintergrund aktualisiert. Ist GitHub nicht erreichbar, bleiben die letzten Werte (bis zu 7 Tage) stehen, ganz ohne Daten wird die Zeile einfach weggelassen.
+- **Unterseite `/mods`:** Alle Links mit GitHub-Repo als Karten, gruppiert nach den Zwischenüberschriften aus `links`. Pro Mod: Beschreibung (aus der Config, sonst die Repo-Beschreibung), Downloads, Sterne, letztes Update, Lizenz und pro Minecraft-Version ein Download-Button direkt zur `.jar` des neuesten Releases (ohne `-sources`/`-javadoc`/`-dev`).
 - **Token (empfohlen):** Ohne Anmeldung erlaubt GitHub nur 60 Anfragen pro Stunde, und die teilen sich alle Worker auf derselben Cloudflare-IP. Einen [Fine-grained Token](https://github.com/settings/personal-access-tokens/new) mit „Public repositories (read-only)“ und ohne weitere Rechte anlegen und im Cloudflare-Dashboard unter *Worker → Settings → Variables and Secrets* als Secret `GITHUB_TOKEN` eintragen. Lokal geht das über eine `.dev.vars`-Datei mit `GITHUB_TOKEN=…`.
 
 ### Icons
