@@ -1,5 +1,6 @@
 import config from "../config.json";
 import { getAllStats, linkRepo } from "./github.js";
+import { countVisit } from "./counter.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -13,8 +14,12 @@ export default {
         ? modsPage
         : null;
     if (page) {
-      const stats = await getAllStats(config.links ?? [], env, ctx);
-      return new Response(renderPage(config, origin, page(config, stats)), {
+      // Only the start page counts visitors; both lookups run at the same time.
+      const [stats, visitors] = await Promise.all([
+        getAllStats(config.links ?? [], env, ctx),
+        page === homePage && config.counter ? countVisit(request, env, ctx) : null,
+      ]);
+      return new Response(renderPage(config, origin, page(config, stats, { visitors })), {
         headers: {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "public, max-age=300",
@@ -160,6 +165,21 @@ function absoluteUrl(url, origin) {
   return value.startsWith("/") ? origin + value : value;
 }
 
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+// Readable text color on top of an accent color (WCAG relative luminance).
+function inkFor(hex) {
+  const channel = (i) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+  return luminance > 0.5 ? "#1b1b1b" : "#ffffff";
+}
+
+// JSON that is safe to put inside a <script> tag.
+const jsonForScript = (value) => JSON.stringify(value).replace(/</g, "\\u003c");
+
 // Discord & co. cache embed images per URL. The banner is generated from the config,
 // so a hash of the config as ?v= makes them fetch the new image after every change.
 function configVersion(c) {
@@ -172,11 +192,22 @@ function configVersion(c) {
 const CONFIG_VERSION = configVersion(config);
 
 // Start page: profile, socials and all links.
-function homePage(c, stats) {
+// "You are visitor no. 000042" with each digit in its own little glowing box.
+function renderCounter(visitors, anim) {
+  if (typeof visitors !== "number") return "";
+  const digits = String(visitors).padStart(6, "0");
+  return `<div class="counter"${anim()} title="${esc(visitors.toLocaleString("en-US"))} visits">
+      <span class="counter-label">you are visitor no.</span>
+      <span class="counter-digits" aria-label="${visitors}">${[...digits].map((d) => `<span>${d}</span>`).join("")}</span>
+    </div>`;
+}
+
+function homePage(c, stats, { visitors } = {}) {
   const bio = esc(c.bio).replace(/\n/g, "<br>");
   return {
     path: "/",
     loader: true,
+    retroFont: Boolean(c.counter),
     content: (anim) => `
     ${c.avatar ? `<img class="avatar" src="${esc(safeUrl(c.avatar))}" alt="${esc(c.name)}" width="112" height="112"${anim("avatar")}>` : ""}
     <h1${anim()}>${esc(c.name)}</h1>
@@ -188,6 +219,7 @@ function homePage(c, stats) {
     <div class="links">
       ${(c.links ?? []).map((l) => renderLink(l, anim, stats)).join("\n      ")}
     </div>
+    ${c.counter ? renderCounter(visitors, anim) : ""}
     ${c.footer ? `<footer${anim()}>${esc(c.footer)}</footer>` : ""}`,
   };
 }
@@ -294,6 +326,15 @@ function renderPage(c, origin, page) {
       ? css(bg.gradient)
       : "none";
 
+  const accent = HEX_COLOR.test(theme.accent ?? "") ? theme.accent : "#39c5bb";
+  // Color themes the visitor can switch between; the choice is remembered in their browser.
+  const themes = (c.themes ?? []).filter((t) => t?.name && HEX_COLOR.test(t.accent ?? ""));
+  const themeMap = Object.fromEntries(themes.map((t) => [t.name, [t.accent, inkFor(t.accent)]]));
+  const fontFamilies = [
+    font && `family=${encodeURIComponent(font)}:wght@400;500;600;700`,
+    page.retroFont && "family=VT323",
+  ].filter(Boolean);
+
   return `<!doctype html>
 <html lang="${esc(meta.lang || "de")}">
 <head>
@@ -314,13 +355,25 @@ function renderPage(c, origin, page) {
   <meta name="twitter:image" content="${esc(absoluteUrl(ogImage, origin))}">` : ""}
   <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  ${font ? `<link rel="preconnect" href="https://fonts.googleapis.com">
+  ${fontFamilies.length ? `<link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}:wght@400;500;700&display=swap">` : ""}
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?${fontFamilies.join("&")}&display=swap">` : ""}
+  ${themes.length ? `<script>
+    // Apply the saved color theme before the page is drawn, so it doesn't flash in the default color.
+    try {
+      const saved = ${jsonForScript(themeMap)}[localStorage.getItem("theme")];
+      if (saved) {
+        document.documentElement.style.setProperty("--accent", saved[0]);
+        document.documentElement.style.setProperty("--accent-ink", saved[1]);
+      }
+    } catch {}
+  </script>` : ""}
   <style>
     :root {
       --text: ${css(theme.text || "#ffffff")};
-      --accent: ${css(theme.accent || "#39c5bb")};
+      --accent: ${css(accent)};
+      /* Text on accent-colored buttons: dark on light accents like yellow, white otherwise */
+      --accent-ink: ${inkFor(accent)};
       --radius: ${css(theme.radius || "14px")};
       --bg-color: ${css(bg.color || "#111111")};
       /* Shown behind the image, e.g. while it is still loading */
@@ -496,7 +549,7 @@ function renderPage(c, origin, page) {
       padding: 8px 14px;
       border-radius: 999px;
       background: var(--accent);
-      color: #fff;
+      color: var(--accent-ink);
       font-weight: 600;
       font-size: .9rem;
       text-decoration: none;
@@ -530,7 +583,7 @@ function renderPage(c, origin, page) {
     .style-solid .link:hover { filter: brightness(1.08); }
     .style-outline .link { background: transparent; border: 2px solid var(--text); }
     .style-outline .link:hover { background: var(--text); color: var(--bg-color); }
-    .link.highlight { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .link.highlight { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     .style-solid .link.highlight { background: transparent; border: 2px solid var(--accent); }
 
     .icon.brand {
@@ -543,6 +596,63 @@ function renderPage(c, origin, page) {
     a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     footer { margin-top: 40px; font-size: .8rem; opacity: .6; }
 
+    /* Retro visitor counter */
+    .counter { margin-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .counter + footer { margin-top: 18px; }
+    .counter-label { font-family: "VT323", ui-monospace, monospace; font-size: 1.05rem; letter-spacing: .06em; opacity: .75; }
+    .counter-digits { display: inline-flex; gap: 3px; padding: 4px; border-radius: 6px; background: rgba(0, 0, 0, .55); border: 1px solid rgba(255, 255, 255, .15); }
+    .counter-digits span {
+      width: 1.35rem;
+      padding: 1px 0 0;
+      border-radius: 3px;
+      background: linear-gradient(#111 0 50%, #1c1c1c 50% 100%);
+      color: var(--accent);
+      font: 1.6rem/1.1 "VT323", ui-monospace, monospace;
+      text-align: center;
+      text-shadow: 0 0 6px var(--accent);
+    }
+
+    /* Color theme picker (top right) */
+    .themes {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 5;
+      display: flex;
+      gap: 6px;
+      padding: 6px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, .3);
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+    }
+    .swatch {
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, .5);
+      background: var(--c);
+      cursor: pointer;
+      transition: transform .15s ease, border-color .15s ease;
+    }
+    .swatch:hover { transform: scale(1.12); }
+    .swatch[aria-pressed="true"] { border-color: #fff; box-shadow: 0 0 0 2px var(--c); }
+    .swatch:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+    /* Easter egg: falling leeks */
+    .leek {
+      position: fixed;
+      top: -90px;
+      z-index: 20;
+      width: 34px;
+      pointer-events: none;
+      animation: leek-fall var(--fall) cubic-bezier(.35, 0, .65, 1) forwards;
+    }
+    .leek svg { display: block; width: 100%; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .3)); }
+    @keyframes leek-fall {
+      to { translate: var(--drift) calc(100vh + 120px); rotate: var(--spin); }
+    }
     /* Loader: avatar with a spinning ring, shown until everything has loaded */
     .loader {
       position: fixed;
@@ -634,8 +744,106 @@ function renderPage(c, origin, page) {
   ${loader ? `<div class="loader" aria-hidden="true">
     <div class="loader-ring">${c.avatar ? `<img src="${esc(safeUrl(c.avatar))}" alt="" onload="this.classList.add('loaded')">` : ""}</div>
   </div>` : ""}
+  ${themes.length > 1 ? `<div class="themes" role="group" aria-label="Color theme" hidden>
+    ${themes.map((t) => `<button class="swatch" type="button" data-theme="${esc(t.name)}" style="--c:${css(t.accent)}" aria-label="${esc(t.name)}" title="${esc(t.name)}" aria-pressed="false"></button>`).join("\n    ")}
+  </div>` : ""}
   <main${page.wide ? ' class="wide"' : ""}>${page.content(anim)}
   </main>
+  ${themes.length > 1 ? `<script>
+    (() => {
+      // Color theme picker; the default theme is the first one, the choice is kept in localStorage.
+      const themes = ${jsonForScript(themeMap)};
+      const picker = document.querySelector(".themes");
+      const root = document.documentElement;
+      let current = null;
+      try { current = localStorage.getItem("theme"); } catch {}
+      if (!themes[current]) current = ${jsonForScript(themes[0].name)};
+      const mark = () => picker.querySelectorAll(".swatch").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.theme === current)));
+      picker.addEventListener("click", (e) => {
+        const button = e.target.closest(".swatch");
+        if (!button || !themes[button.dataset.theme]) return;
+        current = button.dataset.theme;
+        root.style.setProperty("--accent", themes[current][0]);
+        root.style.setProperty("--accent-ink", themes[current][1]);
+        try { localStorage.setItem("theme", current); } catch {}
+        mark();
+      });
+      mark();
+      picker.hidden = false;
+    })();
+  </script>` : ""}
+  ${c.easterEgg ? `<script>
+    (() => {
+      // Easter egg: Konami code (↑ ↑ ↓ ↓ ← → ← → B A) or three quick clicks on the avatar → leek rain + jingle.
+      const LEEK = '<svg viewBox="0 0 24 96" aria-hidden="true">'
+        + '<path d="M10.5 42C11 28 12 16 12 4c1 12 1.5 24 1.5 38z" fill="#4cbb5a"/>'
+        + '<path d="M9 42C8 26 3 14 1 2c6 8 10 22 11 38z" fill="#3fa34d"/>'
+        + '<path d="M15 42c1-16 6-28 8-40-6 8-10 22-11 38z" fill="#2e8b3e"/>'
+        + '<path d="M9 40h6v46a3 3 0 0 1-6 0z" fill="#f4f7ec"/>'
+        + '<path d="M9 40h6v14H9z" fill="#c6e5a2"/>'
+        + '<path d="M10 88l-2 5M12 89v5M14 88l2 5" stroke="#d8cfb4" stroke-width="1.2" stroke-linecap="round"/>'
+        + '</svg>';
+      let raining = false;
+
+      // A short chiptune arpeggio, made on the fly with the Web Audio API (no sound file).
+      function jingle() {
+        try {
+          const audio = new (window.AudioContext || window.webkitAudioContext)();
+          const notes = [880, 1108.73, 1318.51, 1760, 1318.51, 1760];
+          notes.forEach((freq, i) => {
+            const start = audio.currentTime + i * 0.085;
+            const osc = audio.createOscillator();
+            const gain = audio.createGain();
+            osc.type = i % 2 ? "triangle" : "square";
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.06, start);
+            gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
+            osc.connect(gain).connect(audio.destination);
+            osc.start(start);
+            osc.stop(start + 0.17);
+          });
+          setTimeout(() => audio.close(), 1200);
+        } catch {}
+      }
+
+      function leekRain() {
+        if (raining) return;
+        raining = true;
+        jingle();
+        setTimeout(() => (raining = false), 5000);
+        if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        for (let i = 0; i < 36; i++) {
+          const leek = document.createElement("div");
+          leek.className = "leek";
+          leek.innerHTML = LEEK;
+          leek.style.left = Math.random() * 100 + "vw";
+          leek.style.setProperty("--fall", 2.2 + Math.random() * 2 + "s");
+          leek.style.setProperty("--drift", (Math.random() - 0.5) * 160 + "px");
+          leek.style.setProperty("--spin", (Math.random() - 0.5) * 1080 + "deg");
+          leek.style.animationDelay = Math.random() * 1.2 + "s";
+          leek.addEventListener("animationend", () => leek.remove());
+          document.body.append(leek);
+        }
+      }
+
+      const code = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
+      let pos = 0;
+      addEventListener("keydown", (e) => {
+        const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+        // A wrong key restarts the code; an extra ↑ keeps the two ↑ typed so far.
+        pos = key === code[pos] ? pos + 1 : key === code[0] ? (pos === 2 ? 2 : 1) : 0;
+        if (pos === code.length) { pos = 0; leekRain(); }
+      });
+
+      const avatar = document.querySelector(".avatar");
+      let clicks = [];
+      avatar?.addEventListener("click", () => {
+        const now = Date.now();
+        clicks = clicks.filter((t) => now - t < 700).concat(now);
+        if (clicks.length >= 3) { clicks = []; leekRain(); }
+      });
+    })();
+  </script>` : ""}
   ${entrance ? `<script>
     (() => {
       const body = document.body;

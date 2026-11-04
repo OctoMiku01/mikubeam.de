@@ -48,6 +48,13 @@ Alternativ: Repo im Cloudflare-Dashboard unter *Workers & Pages → Create → I
 | `socials` | Icon-Reihe unter der Bio: `{ "icon", "url", "label" }` |
 | `links` | Buttons: `{ "label", "url", "icon", "description", "highlight" }` oder Zwischenüberschrift `{ "type": "header", "label" }` |
 | `footer` | Text ganz unten (optional) |
+| `themes` | Farbwähler oben rechts: `[{ "name", "accent" }]`, der erste ist der Standard. Die Wahl merkt sich der Browser des Besuchers. Die Textfarbe auf Akzent-Buttons wird automatisch passend gewählt (dunkel auf Gelb) |
+| `easterEgg` | `true`: Konami-Code (↑ ↑ ↓ ↓ ← → ← → B A) oder dreimal schnell auf den Avatar klicken → Lauch-Regen mit kurzer Melodie (per Web Audio erzeugt, keine Sounddatei) |
+| `counter` | `true`: Besucherzähler im Retro-Stil auf der Startseite (siehe unten) |
+
+### Besucherzähler
+
+Gespeichert in Cloudflare D1 (Binding `DB` in [`wrangler.jsonc`](wrangler.jsonc)). Die Datenbank `mikubeam-de` wurde im Cloudflare-Dashboard angelegt (ID steht in `wrangler.jsonc`), die Tabelle erstellt der Worker beim ersten Aufruf. Gezählt werden nur Aufrufe der Startseite aus echten Browsern – Link-Vorschauen (Discord, X, …), Crawler und Skripte nicht. Gespeichert wird nur die Zahl, nichts über die Besucher. Antwortet die Datenbank nicht innerhalb von 1,5 s, erscheint die Seite ohne Zähler. Lokal (`npm run dev`) zählt eine eigene SQLite-Datei unter `.wrangler/`.
 
 ### Projekt-Infos von GitHub
 

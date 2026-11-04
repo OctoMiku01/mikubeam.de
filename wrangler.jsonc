@@ -8,6 +8,15 @@
   "build": {
     "command": "node scripts/banner.mjs"
   },
+  // Visitor counter (D1 database created in the Cloudflare dashboard, Western Europe).
+  // The table is created by the worker on first use; locally `wrangler dev` uses a local SQLite file.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mikubeam-de",
+      "database_id": "3c0ad40c-3021-4ea3-8650-41f18138e65a"
+    }
+  ],
   // Files in public/ (avatar, background, favicon, ...) are served directly.
   // Everything else – including "/" – is handled by the worker.
   "assets": {
