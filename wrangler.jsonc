@@ -3,6 +3,11 @@
   "name": "mikubeam-de",
   "main": "src/worker.js",
   "compatibility_date": "2026-10-01",
+  // Rebuilds public/banner.jpg from config.json before every `wrangler dev` and `wrangler deploy`
+  // (also on Cloudflare's automatic builds).
+  "build": {
+    "command": "node scripts/banner.mjs"
+  },
   // Files in public/ (avatar, background, favicon, ...) are served directly.
   // Everything else – including "/" – is handled by the worker.
   "assets": {

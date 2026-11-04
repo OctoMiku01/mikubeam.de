@@ -61,6 +61,6 @@ Alternativ: Repo im Cloudflare-Dashboard unter *Workers & Pages → Create → I
 
 ### Eigene Bilder
 
-Favicon: `public/favicon.png` (192 px) und `public/apple-touch-icon.png` (180 px, für iOS), `/favicon.ico` leitet auf `favicon.png` um. Embed-Banner: `public/banner.jpg` (1200×630).
+Favicon: `public/favicon.png` (192 px) und `public/apple-touch-icon.png` (180 px, für iOS), `/favicon.ico` leitet auf `favicon.png` um. Embed-Banner: `public/banner.jpg` (1200×630) wird von [`scripts/banner.mjs`](scripts/banner.mjs) automatisch aus `config.json` erzeugt (Titel, `meta.siteName`, Bio, Avatar, Hintergrundbild, Akzentfarbe, Schrift) – vor jedem `npm run dev` und `npm run deploy`, oder von Hand mit `npm run banner`. Braucht beim Erzeugen Internet (Schrift von Google Fonts, Avatar-URL). Die Bild-URL im Embed bekommt eine Prüfsumme der Config angehängt (`?v=…`), damit Discord nach Änderungen das neue Bild lädt.
 
 Dateien einfach in `public/` legen (z. B. `public/avatar.png`, `public/bg.jpg`) und in der Config mit `/avatar.png` bzw. `/bg.jpg` referenzieren.

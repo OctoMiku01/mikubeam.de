@@ -115,6 +115,17 @@ function absoluteUrl(url, origin) {
   return value.startsWith("/") ? origin + value : value;
 }
 
+// Discord & co. cache embed images per URL. The banner is generated from the config,
+// so a hash of the config as ?v= makes them fetch the new image after every change.
+function configVersion(c) {
+  let hash = 0x811c9dc5;
+  for (const ch of JSON.stringify(c)) {
+    hash = Math.imul(hash ^ ch.charCodeAt(0), 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+const CONFIG_VERSION = configVersion(config);
+
 function renderPage(c, origin) {
   const theme = c.theme ?? {};
   const bg = c.background ?? {};
@@ -123,7 +134,9 @@ function renderPage(c, origin) {
   const description = meta.description || c.bio || "";
   const themeColor = meta.themeColor || theme.accent || bg.color || "#000000";
   // A dedicated meta.image is shown as a large banner, otherwise the avatar as a small thumbnail.
-  const ogImage = meta.image || c.avatar;
+  const ogImage = meta.image
+    ? `${meta.image}${meta.image.includes("?") ? "&" : "?"}v=${CONFIG_VERSION}`
+    : c.avatar;
   const font = theme.font && theme.font !== "system" ? theme.font : null;
   const animation = c.animation ?? {};
   const entrance = animation.entrance !== false;
@@ -162,7 +175,7 @@ function renderPage(c, origin) {
   <meta name="twitter:card" content="${meta.image ? "summary_large_image" : "summary"}">
   ${meta.image ? `<meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta name="twitter:image" content="${esc(absoluteUrl(meta.image, origin))}">` : ""}
+  <meta name="twitter:image" content="${esc(absoluteUrl(ogImage, origin))}">` : ""}
   <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   ${font ? `<link rel="preconnect" href="https://fonts.googleapis.com">

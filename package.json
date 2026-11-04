@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "banner": "node scripts/banner.mjs"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "satori": "^0.63.2",
+    "sharp": "^0.35.5",
     "wrangler": "^4.151.3"
   }
 }
