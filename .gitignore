@@ -1,3 +1,6 @@
 node_modules/
 .wrangler/
 .dev.vars
+
+# Generated from config.json by scripts/banner.mjs on every build
+public/banner.jpg
