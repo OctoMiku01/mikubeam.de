@@ -551,8 +551,7 @@ function renderPage(c, origin, page) {
     body {
       font-family: var(--font);
       color: var(--text);
-      background: var(--bg-base);
-      background-attachment: fixed;
+      background: var(--bg-color);
       min-height: 100vh;
       min-height: 100dvh;
       display: flex;
@@ -566,14 +565,26 @@ function renderPage(c, origin, page) {
       z-index: -1;
       pointer-events: none;
     }
+    /* Background layers are sized to the *large* viewport (browser bars hidden), so they don't
+       resize — and the cover image doesn't jump — when a phone's address bar slides in or out. */
     body::before {
-      inset: calc(var(--bg-blur) * -2);
-      background: var(--bg-layer);
+      top: calc(var(--bg-blur) * -2);
+      left: calc(var(--bg-blur) * -2);
+      right: calc(var(--bg-blur) * -2);
+      height: calc(100vh + var(--bg-blur) * 4);
+      height: calc(100lvh + var(--bg-blur) * 4);
+      background: var(--bg-layer), var(--bg-base);
       filter: blur(var(--bg-blur));
+      transform: translateZ(0);
     }
     body::after {
-      inset: 0;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 100vh;
+      height: 100lvh;
       background: rgba(0, 0, 0, var(--bg-dim));
+      transform: translateZ(0);
     }
     main {
       width: 100%;
