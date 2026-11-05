@@ -20,7 +20,7 @@ export default {
       const [stats, visitors, now] = await Promise.all([
         getAllStats(config.links ?? [], env, ctx),
         isHome && config.counter ? countVisit(request, env, ctx) : null,
-        isHome && config.now ? getNow(config, env) : null,
+        isHome && config.now ? getNow(config, env, ctx) : null,
       ]);
       return new Response(renderPage(config, origin, page(config, stats, { visitors, now })), {
         headers: {
@@ -33,7 +33,7 @@ export default {
     }
     // "Right now" box as an HTML fragment; the start page reloads it every 30 seconds.
     if (pathname === "/now" && config.now) {
-      return new Response(renderNow(await getNow(config, env)), {
+      return new Response(renderNow(await getNow(config, env, ctx)), {
         headers: {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "no-store",

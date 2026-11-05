@@ -52,7 +52,7 @@ async function twitchStatus(login, env) {
 }
 
 // Album art may only come from these image servers (Last.fm and Apple's iTunes CDN).
-const COVER_HOSTS = [/^lastfm\.freetls\.fastly\.net$/, /^is\d+-ssl\.mzstatic\.com$/];
+const COVER_HOSTS = [/^lastfm\.freetls\.fastly\.net$/, /^is\d+-ssl\.mzstatic\.com$/, /^cdn-images\.dzcdn\.net$/, /^e-cdns-images\.dzcdn\.net$/];
 const isCoverUrl = (url) => {
   try {
     const u = new URL(url);
@@ -76,7 +76,7 @@ function lastfmImage(images) {
 // Artwork for a song Last.fm sent without one: Last.fm's track info first, then the iTunes search.
 // Cached per song for a week, including "nothing found".
 async function findCover(artist, name, env) {
-  const key = `cover-${encodeURIComponent(`${artist}|${name}`.toLowerCase()).slice(0, 400)}`;
+  const key = `cover2-${encodeURIComponent(`${artist}|${name}`.toLowerCase()).slice(0, 400)}`;
   const { url } = await cached(key, COVER_TTL_S, async () => {
     try {
       const params = new URLSearchParams({
@@ -86,21 +86,46 @@ async function findCover(artist, name, env) {
       const fromLastfm = res.ok ? lastfmImage((await res.json()).track?.album?.image) : null;
       if (fromLastfm) return { url: fromLastfm };
     } catch {}
-    try {
-      const params = new URLSearchParams({ term: `${artist} ${name}`, entity: "song", limit: "1", country: "JP" });
-      const res = await fetch(`https://itunes.apple.com/search?${params}`);
-      const art = res.ok ? (await res.json()).results?.[0]?.artworkUrl100 : null;
-      // artworkUrl100 is 100×100; the same URL with a different size gives a sharper image.
-      if (art && isCoverUrl(art)) return { url: art.replace(/\/100x100bb\./, "/300x300bb.") };
-    } catch {}
+    // iTunes and Deezer are asked at the same time; iTunes wins if both know the song.
+    // null = "service answered, no cover", undefined = "request failed".
+    const [itunes, deezer] = await Promise.all([itunesCover(artist, name), deezerCover(artist, name)]);
+    if (itunes || deezer) return { url: itunes || deezer };
+    // Only remember "no cover" when both services really answered; after an error, try again next time.
+    if (itunes === undefined || deezer === undefined) throw new Error("cover search failed");
     return { url: null };
   });
   return url;
 }
 
+async function itunesCover(artist, name) {
+  try {
+    const params = new URLSearchParams({ term: `${artist} ${name}`, entity: "song", limit: "1", country: "JP" });
+    const res = await fetch(`https://itunes.apple.com/search?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const art = (await res.json()).results?.[0]?.artworkUrl100;
+    // artworkUrl100 is 100×100; the same URL with a different size gives a sharper image.
+    return art && isCoverUrl(art) ? art.replace(/\/100x100bb\./, "/300x300bb.") : null;
+  } catch (err) {
+    console.warn(`iTunes cover: ${err.message}`);
+    return undefined;
+  }
+}
+
+async function deezerCover(artist, name) {
+  try {
+    const res = await fetch(`https://api.deezer.com/search?limit=1&q=${encodeURIComponent(`${artist} ${name}`)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const art = (await res.json()).data?.[0]?.album?.cover_medium; // 250×250
+    return art && isCoverUrl(art) ? art : null;
+  } catch (err) {
+    console.warn(`Deezer cover: ${err.message}`);
+    return undefined;
+  }
+}
+
 const coverPath = (url) => (url ? `/cover?src=${encodeURIComponent(url)}` : null);
 
-async function lastfmTrack(user, env) {
+async function lastfmTrack(user, env, ctx) {
   if (!user || !env.LASTFM_API_KEY) return null;
   return cached(`lastfm-${user.toLowerCase()}`, LASTFM_TTL_S, async () => {
     const params = new URLSearchParams({
@@ -113,9 +138,14 @@ async function lastfmTrack(user, env) {
     const track = (await res.json()).recenttracks?.track?.[0];
     if (!track) return { playing: false };
     const artist = track.artist?.["#text"] ?? "";
-    // A slow artwork search must not hold up the song itself.
-    const cover = lastfmImage(track.image)
-      ?? await Promise.race([findCover(artist, track.name, env).catch(() => null), timeout(COVER_TIMEOUT_MS)]);
+    // A slow artwork search must not hold up the song itself. It still finishes in the background
+    // (waitUntil) and lands in the cache, so the next refresh shows the cover.
+    let cover = lastfmImage(track.image);
+    if (!cover) {
+      const search = findCover(artist, track.name, env).catch(() => null);
+      ctx?.waitUntil(search);
+      cover = await Promise.race([search, timeout(COVER_TIMEOUT_MS)]);
+    }
     return {
       playing: track["@attr"]?.nowplaying === "true",
       playedAt: track.date?.uts ? Number(track.date.uts) * 1000 : null,
@@ -135,11 +165,11 @@ const safe = (promise, label) =>
   });
 
 // { twitch: {...} | null, music: {...} | null }
-export async function getNow(config, env) {
+export async function getNow(config, env, ctx) {
   const now = config.now ?? {};
   const [twitch, music] = await Promise.all([
     safe(twitchStatus(now.twitch, env), "Twitch"),
-    safe(lastfmTrack(now.lastfm, env), "Last.fm"),
+    safe(lastfmTrack(now.lastfm, env, ctx), "Last.fm"),
   ]);
   return { twitch, music };
 }
