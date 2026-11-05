@@ -24,6 +24,10 @@
     { "name": "Luka", "accent": "#ff7eb6" }
   ],
   "easterEgg": true,
+  "now": {
+    "twitch": "octomiku01",
+    "lastfm": ""
+  },
   "counter": true,
   "animation": {
     "loader": true,

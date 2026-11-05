@@ -52,6 +52,15 @@ Alternativ: Repo im Cloudflare-Dashboard unter *Workers & Pages → Create → I
 | `easterEgg` | `true`: Konami-Code (↑ ↑ ↓ ↓ ← → ← → B A) oder dreimal schnell auf den Avatar klicken → Lauch-Regen mit kurzer Melodie (per Web Audio erzeugt, keine Sounddatei) |
 | `counter` | `true`: Besucherzähler im Retro-Stil auf der Startseite (siehe unten) |
 
+### „Jetzt gerade“-Box
+
+`"now": { "twitch": "<login>", "lastfm": "<benutzername>" }` zeigt unter den Social-Icons:
+
+- **Twitch:** roter LIVE-Button mit Titel, Spiel und Zuschauern, solange gestreamt wird. Braucht die Secrets `TWITCH_CLIENT_ID` und `TWITCH_CLIENT_SECRET` (App auf [dev.twitch.tv/console](https://dev.twitch.tv/console)).
+- **Last.fm:** „Listening to“ mit Cover, oder „Last played“, wenn der letzte Song höchstens 2 Stunden her ist. Braucht das Secret `LASTFM_API_KEY` ([API-Konto](https://www.last.fm/api/account/create)) und einen Scrobbler, z. B. die Browser-Erweiterung *Web Scrobbler* (YouTube Music im Browser) oder *Pano Scrobbler* (Android).
+
+Fehlt ein Secret oder ist der Name leer, wird die Zeile einfach weggelassen. Twitch wird 60 s, Last.fm 30 s gecacht; die Seite lädt die Box alle 30 s über `/now` nach (pausiert, solange der Tab im Hintergrund ist). Cover laufen über `/cover/…` durch den Worker, damit Besucher nicht direkt Last.fm kontaktieren. Lokal kommen die Secrets in eine `.dev.vars`-Datei.
+
 ### Besucherzähler
 
 Gespeichert in Cloudflare D1 (Binding `DB` in [`wrangler.jsonc`](wrangler.jsonc)). Die Datenbank `mikubeam-de` wurde im Cloudflare-Dashboard angelegt (ID steht in `wrangler.jsonc`), die Tabelle erstellt der Worker beim ersten Aufruf. Gezählt werden nur Aufrufe der Startseite aus echten Browsern – Link-Vorschauen (Discord, X, …), Crawler und Skripte nicht. Gespeichert wird nur die Zahl, nichts über die Besucher. Antwortet die Datenbank nicht innerhalb von 1,5 s, erscheint die Seite ohne Zähler. Lokal (`npm run dev`) zählt eine eigene SQLite-Datei unter `.wrangler/`.

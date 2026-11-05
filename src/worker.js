@@ -1,6 +1,7 @@
 import config from "../config.json";
 import { getAllStats, linkRepo } from "./github.js";
 import { countVisit } from "./counter.js";
+import { getNow, serveCover } from "./now.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -14,12 +15,14 @@ export default {
         ? modsPage
         : null;
     if (page) {
-      // Only the start page counts visitors; both lookups run at the same time.
-      const [stats, visitors] = await Promise.all([
+      // Only the start page counts visitors and shows the "right now" box; all lookups run at once.
+      const isHome = page === homePage;
+      const [stats, visitors, now] = await Promise.all([
         getAllStats(config.links ?? [], env, ctx),
-        page === homePage && config.counter ? countVisit(request, env, ctx) : null,
+        isHome && config.counter ? countVisit(request, env, ctx) : null,
+        isHome && config.now ? getNow(config, env) : null,
       ]);
-      return new Response(renderPage(config, origin, page(config, stats, { visitors })), {
+      return new Response(renderPage(config, origin, page(config, stats, { visitors, now })), {
         headers: {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "public, max-age=300",
@@ -27,6 +30,19 @@ export default {
           "referrer-policy": "strict-origin-when-cross-origin",
         },
       });
+    }
+    // "Right now" box as an HTML fragment; the start page reloads it every 30 seconds.
+    if (pathname === "/now" && config.now) {
+      return new Response(renderNow(await getNow(config, env)), {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    }
+    if (pathname.startsWith("/cover/")) {
+      return serveCover(pathname.slice("/cover/".length));
     }
     // Browsers and crawlers request /favicon.ico on their own; point them at the PNG.
     if (pathname === "/favicon.ico") {
@@ -316,7 +332,39 @@ function renderCounter(visitors, anim) {
     </div>`;
 }
 
-function homePage(c, stats, { visitors } = {}) {
+// "3 min ago", "2 h ago"
+function timeAgo(ms) {
+  const minutes = Math.max(1, Math.round((Date.now() - ms) / 60000));
+  return minutes < 60 ? `${minutes} min ago` : `${Math.round(minutes / 60)} h ago`;
+}
+
+const LAST_PLAYED_MAX_MS = 2 * 60 * 60 * 1000; // Show the last song only if it was this recent.
+
+// Inner HTML of the "right now" box; empty when there is nothing to show.
+function renderNow(now) {
+  if (!now) return "";
+  const rows = [];
+  const { twitch, music } = now;
+  if (twitch?.live) {
+    const details = [twitch.game, `${compactNumber(twitch.viewers ?? 0)} watching`].filter(Boolean).join(" · ");
+    rows.push(`<a class="now-row now-live" href="${esc(safeUrl(twitch.url))}" target="_blank" rel="noopener noreferrer">
+        <span class="live-badge"><span class="live-dot"></span>LIVE</span>
+        <span class="now-text"><span class="now-title">${esc(twitch.title)}</span><span class="now-sub">${esc(details)}</span></span>
+      </a>`);
+  }
+  const recent = music && (music.playing || (music.playedAt && Date.now() - music.playedAt < LAST_PLAYED_MAX_MS));
+  if (recent && music.name) {
+    const label = music.playing ? "Listening to" : `Last played · ${timeAgo(music.playedAt)}`;
+    rows.push(`<a class="now-row now-music${music.playing ? " playing" : ""}" href="${esc(safeUrl(music.url))}" target="_blank" rel="noopener noreferrer">
+        ${music.cover ? `<img class="cover" src="${esc(music.cover)}" alt="" width="44" height="44" loading="lazy">` : `<span class="cover cover-empty">♪</span>`}
+        <span class="now-text"><span class="now-label">${esc(label)}</span><span class="now-title">${esc(music.name)}</span><span class="now-sub">${esc(music.artist)}</span></span>
+        ${music.playing ? '<span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>' : ""}
+      </a>`);
+  }
+  return rows.join("\n      ");
+}
+
+function homePage(c, stats, { visitors, now } = {}) {
   const bio = esc(c.bio).replace(/\n/g, "<br>");
   return {
     path: "/",
@@ -330,6 +378,7 @@ function homePage(c, stats, { visitors } = {}) {
     ${c.socials?.length ? `<nav class="socials" aria-label="Social Media">
       ${c.socials.map((s) => renderSocial(s, anim)).join("\n      ")}
     </nav>` : ""}
+    ${c.now ? `<div class="now" aria-live="polite"${anim()}>${renderNow(now)}</div>` : ""}
     <div class="links">
       ${(c.links ?? []).map((l) => renderLink(l, anim, stats)).join("\n      ")}
     </div>
@@ -710,6 +759,58 @@ function renderPage(c, origin, page) {
     a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     footer { margin-top: 40px; font-size: .8rem; opacity: .6; }
 
+    /* "Right now" box: Twitch live status and current song */
+    .now { width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 22px; }
+    .now:empty { display: none; }
+    .now-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      color: var(--text);
+      text-decoration: none;
+      text-align: left;
+      background: rgba(0, 0, 0, .28);
+      border: 1px solid rgba(255, 255, 255, .14);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      transition: transform .15s ease, border-color .15s ease;
+    }
+    .now-row:hover, .now-row:focus-visible { transform: scale(1.02); border-color: var(--accent); }
+    .now-live { border-color: rgba(255, 70, 85, .7); }
+    .now-live:hover, .now-live:focus-visible { border-color: #ff4655; }
+    .now-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .now-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .now-label { font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+    .now-title { font-weight: 600; font-size: .95rem; }
+    .now-sub { font-size: .8rem; opacity: .75; }
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px;
+      border-radius: 6px;
+      background: #e91e3c;
+      color: #fff;
+      font-size: .75rem;
+      font-weight: 800;
+      letter-spacing: .06em;
+      flex: none;
+    }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: live-pulse 1.4s ease-in-out infinite; }
+    @keyframes live-pulse { 50% { opacity: .3; } }
+    .cover { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; flex: none; box-shadow: 0 2px 8px rgba(0, 0, 0, .4); }
+    .cover-empty { display: grid; place-items: center; background: rgba(255, 255, 255, .12); font-size: 1.2rem; }
+    .eq { display: flex; align-items: flex-end; gap: 2px; height: 16px; flex: none; }
+    .eq i { width: 3px; height: 100%; border-radius: 1px; background: var(--accent); transform-origin: bottom; animation: eq 1s ease-in-out infinite; }
+    .eq i:nth-child(2) { animation-delay: -.4s; }
+    .eq i:nth-child(3) { animation-delay: -.7s; }
+    @keyframes eq { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+    @media (prefers-reduced-motion: reduce) {
+      .live-dot, .eq i { animation: none; }
+    }
+
     /* Retro visitor counter */
     .counter { margin-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
     .counter + footer { margin-top: 18px; }
@@ -883,6 +984,28 @@ function renderPage(c, origin, page) {
       });
       mark();
       picker.hidden = false;
+    })();
+  </script>` : ""}
+  ${c.now && page.path === "/" ? `<script>
+    (() => {
+      // Keep the "right now" box fresh without reloading; pause while the tab is in the background.
+      const box = document.querySelector(".now");
+      if (!box) return;
+      let timer = null;
+      async function refresh() {
+        try {
+          const res = await fetch("/now", { cache: "no-store" });
+          if (!res.ok) return;
+          const html = (await res.text()).trim();
+          if (html !== box.innerHTML.trim()) box.innerHTML = html;
+        } catch {}
+      }
+      const start = () => { if (!timer) timer = setInterval(refresh, 30000); };
+      const stop = () => { clearInterval(timer); timer = null; };
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) stop(); else { refresh(); start(); }
+      });
+      if (!document.hidden) start();
     })();
   </script>` : ""}
   ${c.easterEgg ? `<script>
