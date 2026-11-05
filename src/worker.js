@@ -1,7 +1,7 @@
 import config from "../config.json";
 import { getAllStats, linkRepo } from "./github.js";
 import { countVisit } from "./counter.js";
-import { diagnose, getNow, serveCover } from "./now.js";
+import { getNow, serveCover } from "./now.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -32,11 +32,6 @@ export default {
       });
     }
     // "Right now" box as an HTML fragment; the start page reloads it every 30 seconds.
-    if (pathname === "/now" && config.now && new URL(request.url).searchParams.has("debug")) {
-      return new Response(JSON.stringify(await diagnose(config, env), null, 2), {
-        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
-      });
-    }
     if (pathname === "/now" && config.now) {
       return new Response(renderNow(await getNow(config, env)), {
         headers: {
