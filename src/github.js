@@ -5,7 +5,7 @@ const FRESH_MS = 60 * 60 * 1000; // Refresh in the background once data is older
 const KEEP_S = 7 * 24 * 60 * 60; // Keep old data this long as a fallback when GitHub is unreachable.
 const FIRST_LOAD_TIMEOUT_MS = 2500; // Without cached data, wait at most this long before rendering without stats.
 // Bump the version whenever the shape of the stored stats changes, so old entries are ignored.
-const CACHE_PREFIX = "https://cache.mikubeam.internal/github/v3/";
+const CACHE_PREFIX = "https://cache.mikubeam.internal/github/v4/";
 
 // "https://github.com/Owner/Repo" (optionally with a trailing slash or .git) -> "Owner/Repo".
 export function repoFromUrl(url) {
@@ -59,10 +59,12 @@ const MAX_NOTES = 4000; // characters of release notes kept per release
 // The release notes as written on GitHub (Markdown), shortened if very long.
 const notesOf = (release) => String(release.body ?? "").trim().slice(0, MAX_NOTES);
 
-// Boils the API answers down to the few values the pages need.
+// Boils the API answers down to the few values the pages need. Release notes are kept apart
+// ({ stats, notes }), because every page reads the stats but only /mods and the feed need notes.
 function summarize(repo, releases) {
   const latestPerMc = new Map();
   const recent = []; // newest releases, for the feed
+  const versionNotes = {}; // MC version → notes of its latest release
   let downloads = 0;
   let updatedAt = null;
   // Releases come newest first, so the first one seen per Minecraft version is its latest.
@@ -76,9 +78,8 @@ function summarize(repo, releases) {
     const { version, mc } = parseRelease(release);
     const key = mc ?? "";
     if (!latestPerMc.has(key)) {
-      latestPerMc.set(key, {
-        version, url: release.html_url, date: release.published_at, jar: mainJar(release), notes: notesOf(release),
-      });
+      latestPerMc.set(key, { version, url: release.html_url, date: release.published_at, jar: mainJar(release) });
+      versionNotes[key] = notesOf(release);
     }
     if (recent.length < RECENT_RELEASES) {
       recent.push({
@@ -91,14 +92,26 @@ function summarize(repo, releases) {
     .map(([mc, info]) => ({ mc: mc || null, ...info }))
     .sort((a, b) => (a.mc && b.mc ? compareVersions(b.mc, a.mc) : 0));
   return {
-    stars: repo.stargazers_count ?? 0,
-    downloads,
-    versions,
-    recent,
-    updatedAt,
-    description: repo.description || null,
-    license: repo.license?.spdx_id && repo.license.spdx_id !== "NOASSERTION" ? repo.license.spdx_id : null,
-    url: repo.html_url,
+    stats: {
+      stars: repo.stargazers_count ?? 0,
+      downloads,
+      versions,
+      updatedAt,
+      description: repo.description || null,
+      license: repo.license?.spdx_id && repo.license.spdx_id !== "NOASSERTION" ? repo.license.spdx_id : null,
+      url: repo.html_url,
+    },
+    notes: { versionNotes, recent },
+  };
+}
+
+// Stats plus release notes: each version gets its `notes`, and `recent` lists the newest releases.
+function withNotes(stats, notes) {
+  if (!stats || !notes) return stats;
+  return {
+    ...stats,
+    versions: stats.versions.map((v) => ({ ...v, notes: notes.versionNotes?.[v.mc ?? ""] ?? "" })),
+    recent: notes.recent ?? [],
   };
 }
 
@@ -120,35 +133,42 @@ async function fetchStats(repo, env) {
   return summarize(await repoRes.json(), await releasesRes.json());
 }
 
-async function refresh(repo, env, cache, key) {
-  const stats = await fetchStats(repo, env);
-  const body = JSON.stringify({ fetchedAt: Date.now(), stats });
-  await cache.put(key, new Response(body, {
-    headers: { "content-type": "application/json", "cache-control": `max-age=${KEEP_S}` },
-  }));
-  return stats;
+const cacheHeaders = { "content-type": "application/json", "cache-control": `max-age=${KEEP_S}` };
+
+async function refresh(repo, env, cache, keys) {
+  const { stats, notes } = await fetchStats(repo, env);
+  await Promise.all([
+    cache.put(keys.stats, new Response(JSON.stringify({ fetchedAt: Date.now(), stats }), { headers: cacheHeaders })),
+    cache.put(keys.notes, new Response(JSON.stringify(notes), { headers: cacheHeaders })),
+  ]);
+  return { stats, notes };
 }
 
 const timeout = (ms) => new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms));
 
-// Returns the stats for one repo, or null if there are none (yet).
+// Returns the stats for one repo (with release notes if `notes` is set), or null if there are none yet.
 // Old data is served right away and refreshed in the background (stale-while-revalidate).
-export async function getRepoStats(repo, env, ctx) {
+export async function getRepoStats(repo, env, ctx, { notes: wantNotes = false } = {}) {
   const cache = caches.default;
-  const key = new Request(CACHE_PREFIX + repo.toLowerCase());
+  const base = CACHE_PREFIX + repo.toLowerCase();
+  const keys = { stats: new Request(base), notes: new Request(`${base}/notes`) };
   try {
-    const cached = await cache.match(key);
+    const [cached, cachedNotes] = await Promise.all([
+      cache.match(keys.stats),
+      wantNotes ? cache.match(keys.notes) : null,
+    ]);
     if (cached) {
       const { fetchedAt, stats } = await cached.json();
       if (Date.now() - fetchedAt > FRESH_MS) {
-        ctx.waitUntil(refresh(repo, env, cache, key).catch((err) => console.warn(err.message)));
+        ctx.waitUntil(refresh(repo, env, cache, keys).catch((err) => console.warn(err.message)));
       }
-      return stats;
+      return wantNotes && cachedNotes ? withNotes(stats, await cachedNotes.json()) : stats;
     }
-    const pending = refresh(repo, env, cache, key);
+    const pending = refresh(repo, env, cache, keys);
     // Let a slow first request finish (and fill the cache) even if the page is rendered without it.
     ctx.waitUntil(pending.catch(() => {}));
-    return await Promise.race([pending, timeout(FIRST_LOAD_TIMEOUT_MS)]);
+    const fresh = await Promise.race([pending, timeout(FIRST_LOAD_TIMEOUT_MS)]);
+    return wantNotes ? withNotes(fresh.stats, fresh.notes) : fresh.stats;
   } catch (err) {
     console.warn(`No stats for ${repo}: ${err.message}`);
     return null;
@@ -156,8 +176,8 @@ export async function getRepoStats(repo, env, ctx) {
 }
 
 // Fetches the stats for all links at once: { "Owner/Repo": stats | null }.
-export async function getAllStats(links, env, ctx) {
+export async function getAllStats(links, env, ctx, options) {
   const repos = [...new Set(links.map(linkRepo).filter(Boolean))];
-  const results = await Promise.all(repos.map((repo) => getRepoStats(repo, env, ctx)));
+  const results = await Promise.all(repos.map((repo) => getRepoStats(repo, env, ctx, options)));
   return Object.fromEntries(repos.map((repo, i) => [repo, results[i]]));
 }

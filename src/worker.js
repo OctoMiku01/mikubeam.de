@@ -24,7 +24,8 @@ export default {
       // Only the start page counts visitors and shows the "right now" box; all lookups run at once.
       const isHome = page === homePage;
       const [stats, visitors, now, topSongs] = await Promise.all([
-        getAllStats(config.links ?? [], env, ctx),
+        // Only /mods needs the release notes; leaving them out keeps the other pages light.
+        getAllStats(config.links ?? [], env, ctx, { notes: page === modsPage }),
         isHome && config.counter ? countVisit(request, env, ctx) : null,
         isHome && config.now ? getNow(config, env, ctx) : null,
         isHome && config.now ? getTopSongs(config, env, ctx) : null,
@@ -40,7 +41,7 @@ export default {
     }
     // Atom feed of the latest mod releases, built from the same GitHub data as /mods.
     if (pathname === "/feed.xml") {
-      const stats = await getAllStats(config.links ?? [], env, ctx);
+      const stats = await getAllStats(config.links ?? [], env, ctx, { notes: true });
       return new Response(renderFeed(config, origin, stats), {
         headers: {
           "content-type": "application/atom+xml; charset=utf-8",
