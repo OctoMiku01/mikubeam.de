@@ -416,9 +416,9 @@ function homePage(c, stats, { visitors, now, topSongs } = {}) {
       ${c.socials.map((s) => renderSocial(s, anim)).join("\n      ")}
     </nav>` : ""}
     ${c.now ? `<div class="now" aria-live="polite"${anim()}>${renderNow(now)}</div>` : ""}
+    ${topSongs?.length ? `<div class="top-wrap">${renderTopSongs(topSongs, anim)}</div>` : ""}
     <div class="links">
       ${(c.links ?? []).map((l) => renderLink(l, anim, stats)).join("\n      ")}
-      ${renderTopSongs(topSongs, anim)}
     </div>
     ${c.counter ? renderCounter(visitors, anim) : ""}
     ${c.footer ? `<footer${anim()}>${esc(c.footer)}</footer>` : ""}`,
@@ -944,7 +944,8 @@ function renderPage(c, origin, page) {
       .live-dot, .eq i { animation: none; }
     }
 
-    /* Top songs this week */
+    /* Top songs this week (below the "right now" box) */
+    .top-wrap { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
     .top-songs {
       list-style: none;
       margin: 0;

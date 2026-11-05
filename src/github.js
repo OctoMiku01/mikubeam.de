@@ -1,5 +1,6 @@
 // Live project stats from the GitHub API: latest version per Minecraft version, stars and downloads.
-// Results are kept in the Cloudflare cache, so GitHub is asked at most once per hour per repo.
+// Results are kept in the Cloudflare cache, so GitHub is asked at most once per hour per repo
+// (the full release list for the download total only once a day).
 
 const FRESH_MS = 60 * 60 * 1000; // Refresh in the background once data is older than this.
 const KEEP_S = 7 * 24 * 60 * 60; // Keep old data this long as a fallback when GitHub is unreachable.
@@ -115,7 +116,13 @@ function withNotes(stats, notes) {
   };
 }
 
-async function fetchStats(repo, env) {
+// Hourly refreshes only read the newest releases (enough for versions, notes and the feed); the
+// long list, which is expensive to parse, is fetched once a day for the total download count.
+const LIGHT_RELEASES = 15;
+const FULL_RELEASES = 100;
+const DOWNLOADS_FRESH_MS = 24 * 60 * 60 * 1000;
+
+async function fetchStats(repo, env, previous) {
   const headers = {
     accept: "application/vnd.github+json",
     "user-agent": "mikubeam.de link page",
@@ -123,20 +130,29 @@ async function fetchStats(repo, env) {
   };
   if (env.GITHUB_TOKEN) headers.authorization = `Bearer ${env.GITHUB_TOKEN}`;
   const api = `https://api.github.com/repos/${repo}`;
+  const full = !previous?.downloadsAt || Date.now() - previous.downloadsAt > DOWNLOADS_FRESH_MS;
   const [repoRes, releasesRes] = await Promise.all([
     fetch(api, { headers }),
-    fetch(`${api}/releases?per_page=100`, { headers }),
+    fetch(`${api}/releases?per_page=${full ? FULL_RELEASES : LIGHT_RELEASES}`, { headers }),
   ]);
   if (!repoRes.ok || !releasesRes.ok) {
     throw new Error(`GitHub API for ${repo}: HTTP ${repoRes.status}/${releasesRes.status}`);
   }
-  return summarize(await repoRes.json(), await releasesRes.json());
+  const result = summarize(await repoRes.json(), await releasesRes.json());
+  if (full) {
+    result.stats.downloadsAt = Date.now();
+  } else {
+    // A light refresh only saw a few releases: keep the daily total (never let it go down).
+    result.stats.downloads = Math.max(result.stats.downloads, previous.downloads ?? 0);
+    result.stats.downloadsAt = previous.downloadsAt;
+  }
+  return result;
 }
 
 const cacheHeaders = { "content-type": "application/json", "cache-control": `max-age=${KEEP_S}` };
 
-async function refresh(repo, env, cache, keys) {
-  const { stats, notes } = await fetchStats(repo, env);
+async function refresh(repo, env, cache, keys, previous) {
+  const { stats, notes } = await fetchStats(repo, env, previous);
   await Promise.all([
     cache.put(keys.stats, new Response(JSON.stringify({ fetchedAt: Date.now(), stats }), { headers: cacheHeaders })),
     cache.put(keys.notes, new Response(JSON.stringify(notes), { headers: cacheHeaders })),
@@ -148,7 +164,7 @@ const timeout = (ms) => new Promise((_, reject) => setTimeout(() => reject(new E
 
 // Returns the stats for one repo (with release notes if `notes` is set), or null if there are none yet.
 // Old data is served right away and refreshed in the background (stale-while-revalidate).
-export async function getRepoStats(repo, env, ctx, { notes: wantNotes = false } = {}) {
+export async function getRepoStats(repo, env, ctx, { notes: wantNotes = false, budget = { left: Infinity } } = {}) {
   const cache = caches.default;
   const base = CACHE_PREFIX + repo.toLowerCase();
   const keys = { stats: new Request(base), notes: new Request(`${base}/notes`) };
@@ -159,8 +175,10 @@ export async function getRepoStats(repo, env, ctx, { notes: wantNotes = false } 
     ]);
     if (cached) {
       const { fetchedAt, stats } = await cached.json();
-      if (Date.now() - fetchedAt > FRESH_MS) {
-        ctx.waitUntil(refresh(repo, env, cache, keys).catch((err) => console.warn(err.message)));
+      // Only a limited number of refreshes per page view; the other repos follow on the next ones.
+      if (Date.now() - fetchedAt > FRESH_MS && budget.left > 0) {
+        budget.left--;
+        ctx.waitUntil(refresh(repo, env, cache, keys, stats).catch((err) => console.warn(err.message)));
       }
       return wantNotes && cachedNotes ? withNotes(stats, await cachedNotes.json()) : stats;
     }
@@ -175,9 +193,13 @@ export async function getRepoStats(repo, env, ctx, { notes: wantNotes = false } 
   }
 }
 
+// At most this many repos are refreshed in the background per page view, to keep its CPU time low.
+const REFRESHES_PER_REQUEST = 2;
+
 // Fetches the stats for all links at once: { "Owner/Repo": stats | null }.
-export async function getAllStats(links, env, ctx, options) {
+export async function getAllStats(links, env, ctx, options = {}) {
   const repos = [...new Set(links.map(linkRepo).filter(Boolean))];
-  const results = await Promise.all(repos.map((repo) => getRepoStats(repo, env, ctx, options)));
+  const budget = { left: REFRESHES_PER_REQUEST };
+  const results = await Promise.all(repos.map((repo) => getRepoStats(repo, env, ctx, { ...options, budget })));
   return Object.fromEntries(repos.map((repo, i) => [repo, results[i]]));
 }
