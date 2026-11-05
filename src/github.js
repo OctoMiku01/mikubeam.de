@@ -5,7 +5,7 @@ const FRESH_MS = 60 * 60 * 1000; // Refresh in the background once data is older
 const KEEP_S = 7 * 24 * 60 * 60; // Keep old data this long as a fallback when GitHub is unreachable.
 const FIRST_LOAD_TIMEOUT_MS = 2500; // Without cached data, wait at most this long before rendering without stats.
 // Bump the version whenever the shape of the stored stats changes, so old entries are ignored.
-const CACHE_PREFIX = "https://cache.mikubeam.internal/github/v2/";
+const CACHE_PREFIX = "https://cache.mikubeam.internal/github/v3/";
 
 // "https://github.com/Owner/Repo" (optionally with a trailing slash or .git) -> "Owner/Repo".
 export function repoFromUrl(url) {
@@ -52,9 +52,17 @@ function mainJar(release) {
   return jar ? { name: jar.name, url: jar.browser_download_url, size: jar.size } : null;
 }
 
+// Kept small: the stats are read from the cache on every page view.
+const RECENT_RELEASES = 8;
+const MAX_NOTES = 4000; // characters of release notes kept per release
+
+// The release notes as written on GitHub (Markdown), shortened if very long.
+const notesOf = (release) => String(release.body ?? "").trim().slice(0, MAX_NOTES);
+
 // Boils the API answers down to the few values the pages need.
 function summarize(repo, releases) {
   const latestPerMc = new Map();
+  const recent = []; // newest releases, for the feed
   let downloads = 0;
   let updatedAt = null;
   // Releases come newest first, so the first one seen per Minecraft version is its latest.
@@ -68,7 +76,15 @@ function summarize(repo, releases) {
     const { version, mc } = parseRelease(release);
     const key = mc ?? "";
     if (!latestPerMc.has(key)) {
-      latestPerMc.set(key, { version, url: release.html_url, date: release.published_at, jar: mainJar(release) });
+      latestPerMc.set(key, {
+        version, url: release.html_url, date: release.published_at, jar: mainJar(release), notes: notesOf(release),
+      });
+    }
+    if (recent.length < RECENT_RELEASES) {
+      recent.push({
+        title: release.name || release.tag_name, version, mc, url: release.html_url,
+        date: release.published_at, notes: notesOf(release),
+      });
     }
   }
   const versions = [...latestPerMc]
@@ -78,6 +94,7 @@ function summarize(repo, releases) {
     stars: repo.stargazers_count ?? 0,
     downloads,
     versions,
+    recent,
     updatedAt,
     description: repo.description || null,
     license: repo.license?.spdx_id && repo.license.spdx_id !== "NOASSERTION" ? repo.license.spdx_id : null,

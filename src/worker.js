@@ -7,6 +7,7 @@ const AVATAR = assets.avatar || config.avatar;
 import { getAllStats, linkRepo } from "./github.js";
 import { countVisit } from "./counter.js";
 import { getNow, serveCover } from "./now.js";
+import { renderMarkdown } from "./markdown.js";
 
 export default {
   async fetch(request, env, ctx) {
@@ -33,6 +34,17 @@ export default {
           "cache-control": "public, max-age=300",
           "x-content-type-options": "nosniff",
           "referrer-policy": "strict-origin-when-cross-origin",
+        },
+      });
+    }
+    // Atom feed of the latest mod releases, built from the same GitHub data as /mods.
+    if (pathname === "/feed.xml") {
+      const stats = await getAllStats(config.links ?? [], env, ctx);
+      return new Response(renderFeed(config, origin, stats), {
+        headers: {
+          "content-type": "application/atom+xml; charset=utf-8",
+          "cache-control": "public, max-age=600",
+          "x-content-type-options": "nosniff",
         },
       });
     }
@@ -67,6 +79,7 @@ const BUILTIN_ICONS = {
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   package: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
   "arrow-left": '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+  rss: '<path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/>',
 };
 
 function esc(value) {
@@ -419,6 +432,21 @@ function renderModCard(link, stats, anim) {
     return `<li class="release">${label}${button}</li>`;
   });
 
+  // "What's new": the notes of the newest Minecraft version's release (versions are sorted by MC
+  // version), unless another one came out more than a day later. Collapsed by default.
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const newest = (stats?.versions ?? []).reduce(
+    (best, v) => (best && Date.parse(v.date) - Date.parse(best.date) <= DAY_MS ? best : v),
+    null,
+  );
+  const notes = newest?.notes ? renderMarkdown(newest.notes) : "";
+  const whatsNew = notes
+    ? `<details class="notes">
+          <summary>What's new in v${esc(newest.version)}${newest.mc ? ` <span>(MC ${esc(newest.mc)})</span>` : ""}</summary>
+          <div class="notes-body">${notes}</div>
+        </details>`
+    : "";
+
   return `<article class="mod"${anim()}>
         <header>
           <h3>${esc(link.label)}</h3>
@@ -428,6 +456,7 @@ function renderModCard(link, stats, anim) {
         ${rows.length
           ? `<ul class="releases">${rows.join("")}</ul>`
           : `<p class="empty">No release info right now – see GitHub.</p>`}
+        ${whatsNew}
         <footer>
           <a href="${esc(repoUrl)}" target="_blank" rel="noopener noreferrer">${renderIcon("github")}Source</a>
           <a href="${esc(repoUrl)}/releases" target="_blank" rel="noopener noreferrer">All versions</a>
@@ -456,6 +485,7 @@ function modsPage(c, stats) {
     <a class="back" href="/"${anim()}>${renderIcon("arrow-left")}${esc(name)}</a>
     <h1${anim()}>Mods</h1>
     <p class="bio"${anim()}>All my Minecraft mods and ports, with downloads for every supported version.</p>
+    <a class="feed-link" href="/feed.xml"${anim()}>${renderIcon("rss")}Follow new releases (RSS)</a>
     ${groups.filter((g) => g.mods.length).map((g) => `
     ${g.label ? `<h2 class="section"${anim()}>${esc(g.label)}</h2>` : ""}
     <div class="mods">
@@ -463,6 +493,38 @@ function modsPage(c, stats) {
     </div>`).join("")}
     ${c.footer ? `<footer${anim()}>${esc(c.footer)}</footer>` : ""}`,
   };
+}
+
+// Atom feed: the newest releases of every mod on /mods, newest first.
+const FEED_ENTRIES = 30;
+function renderFeed(c, origin, stats) {
+  const name = c.meta?.title || c.name;
+  const entries = (c.links ?? [])
+    .filter((link) => linkRepo(link) && stats[linkRepo(link)])
+    .flatMap((link) => stats[linkRepo(link)].recent?.map((release) => ({ mod: link.label, ...release })) ?? [])
+    .filter((e) => e.date)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, FEED_ENTRIES);
+  const updated = entries[0]?.date ?? new Date().toISOString();
+  const xml = (value) => esc(value); // the HTML escaping is valid XML escaping too
+  return `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>${xml(`${name} – mod releases`)}</title>
+  <subtitle>New versions of all Minecraft mods by ${xml(name)}</subtitle>
+  <id>${xml(`${origin}/feed.xml`)}</id>
+  <link rel="self" href="${xml(`${origin}/feed.xml`)}"/>
+  <link rel="alternate" type="text/html" href="${xml(`${origin}/mods`)}"/>
+  <updated>${xml(updated)}</updated>
+  <author><name>${xml(name)}</name></author>
+${entries.map((e) => `  <entry>
+    <title>${xml(`${e.mod} ${e.version}${e.mc ? ` for Minecraft ${e.mc}` : ""}`)}</title>
+    <id>${xml(e.url)}</id>
+    <link rel="alternate" type="text/html" href="${xml(e.url)}"/>
+    <published>${xml(e.date)}</published>
+    <updated>${xml(e.date)}</updated>
+    <content type="html">${xml(renderMarkdown(e.notes) || `<p>${esc(e.title)}</p>`)}</content>
+  </entry>`).join("\n")}
+</feed>`;
 }
 
 // Shared page frame (head, theme, background, animations) around the content of one page.
@@ -521,6 +583,7 @@ function renderPage(c, origin, page) {
   <meta name="twitter:image" content="${esc(absoluteUrl(ogImage, origin))}">` : ""}
   <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="alternate" type="application/atom+xml" title="Mod releases" href="/feed.xml">
   ${assets.fonts ? `<link rel="stylesheet" href="${esc(assets.fonts)}">` : ""}
   ${themes.length ? `<script>
     // Apply the saved color theme before the page is drawn, so it doesn't flash in the default color.
@@ -736,6 +799,47 @@ function renderPage(c, origin, page) {
     .dl small { font-weight: 500; opacity: .8; font-size: .75rem; }
     .dl.secondary { background: transparent; border: 1px solid var(--accent); }
     .mod .empty { margin: 14px 0 0; font-size: .9rem; opacity: .7; }
+
+    /* "What's new" release notes on /mods */
+    .notes { margin-top: 12px; border-radius: calc(var(--radius) - 4px); background: rgba(0, 0, 0, .18); }
+    .notes summary {
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: .9rem;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .notes summary::-webkit-details-marker { display: none; }
+    .notes summary::before { content: "▸"; color: var(--accent); transition: transform .15s ease; }
+    .notes[open] summary::before { transform: rotate(90deg); }
+    .notes summary span { font-weight: 500; opacity: .7; }
+    .notes summary:hover { color: var(--accent); }
+    .notes-body { padding: 0 16px 12px; font-size: .88rem; line-height: 1.55; overflow-wrap: anywhere; }
+    .notes-body > :first-child { margin-top: 0; }
+    .notes-body h3, .notes-body h4, .notes-body h5, .notes-body h6 { margin: 14px 0 6px; font-size: .92rem; color: var(--accent); }
+    .notes-body p { margin: 8px 0; opacity: .9; }
+    .notes-body ul, .notes-body ol { margin: 6px 0; padding-left: 20px; }
+    .notes-body li { margin: 4px 0; opacity: .9; }
+    .notes-body a { color: var(--accent); }
+    .notes-body code { padding: 1px 5px; border-radius: 4px; background: rgba(0, 0, 0, .3); font-size: .85em; }
+    .notes-body pre { padding: 10px; border-radius: 6px; background: rgba(0, 0, 0, .35); overflow-x: auto; }
+    .notes-body pre code { padding: 0; background: none; }
+    .notes-body hr { border: 0; border-top: 1px solid rgba(255, 255, 255, .15); }
+    .feed-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      color: var(--text);
+      opacity: .75;
+      font-size: .85rem;
+      text-decoration: none;
+    }
+    .feed-link:hover, .feed-link:focus-visible { opacity: 1; color: var(--accent); }
+    .feed-link .icon { width: 16px; height: 16px; }
     .mod footer { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; font-size: .85rem; opacity: 1; }
     .mod footer a { display: inline-flex; align-items: center; gap: 6px; color: var(--text); opacity: .75; text-decoration: none; }
     .mod footer a:hover, .mod footer a:focus-visible { opacity: 1; color: var(--accent); }

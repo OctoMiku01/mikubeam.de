@@ -11,7 +11,7 @@ const outDir = new URL("public/generated/", root);
 const manifestFile = new URL("src/generated/assets.json", root);
 
 // Icons the worker draws itself (keep in sync with BUILTIN_ICONS in src/worker.js).
-const BUILTIN_ICONS = new Set(["mail", "link", "globe", "heart", "download", "package", "arrow-left"]);
+const BUILTIN_ICONS = new Set(["mail", "link", "globe", "heart", "download", "package", "arrow-left", "rss"]);
 // A browser user agent, so Google Fonts serves woff2 files.
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";
 
