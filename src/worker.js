@@ -362,7 +362,12 @@ function renderNow(now) {
   if (music?.name) {
     const label = music.playing ? "Listening to" : music.playedAt ? `Last played · ${timeAgo(music.playedAt)}` : "Last played";
     rows.push(`<a class="now-row now-music${music.playing ? " playing" : ""}" href="${esc(safeUrl(music.url))}" target="_blank" rel="noopener noreferrer">
-        ${music.cover ? `<img class="cover" src="${esc(music.cover)}" alt="" width="44" height="44" loading="lazy">` : `<span class="cover cover-empty">♪</span>`}
+        ${music.cover
+          ? music.coverWide
+            // YouTube thumbnail: shown whole in 16:9 instead of cropped to a square.
+            ? `<img class="cover wide" src="${esc(music.cover)}" alt="" width="78" height="44" loading="lazy">`
+            : `<img class="cover" src="${esc(music.cover)}" alt="" width="44" height="44" loading="lazy">`
+          : `<span class="cover cover-empty">♪</span>`}
         <span class="now-text"><span class="now-label">${esc(label)}</span><span class="now-title">${esc(music.name)}</span><span class="now-sub">${esc(music.artist)}</span></span>
         ${music.playing ? '<span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>' : ""}
       </a>`);
@@ -810,6 +815,7 @@ function renderPage(c, origin, page) {
     .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: live-pulse 1.4s ease-in-out infinite; }
     @keyframes live-pulse { 50% { opacity: .3; } }
     .cover { width: 44px; height: 44px; border-radius: 6px; object-fit: cover; flex: none; box-shadow: 0 2px 8px rgba(0, 0, 0, .4); }
+    .cover.wide { width: 78px; }
     .cover-empty { display: grid; place-items: center; background: rgba(255, 255, 255, .12); font-size: 1.2rem; }
     .eq { display: flex; align-items: flex-end; gap: 2px; height: 16px; flex: none; }
     .eq i { width: 3px; height: 100%; border-radius: 1px; background: var(--accent); transform-origin: bottom; animation: eq 1s ease-in-out infinite; }
