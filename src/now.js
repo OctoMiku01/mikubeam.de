@@ -94,6 +94,65 @@ export async function getNow(config, env) {
   return { twitch, music };
 }
 
+// Temporary troubleshooting for /now?debug: asks both services directly (no cache, no time limit)
+// and reports what came back. Never includes the keys themselves.
+export async function diagnose(config, env) {
+  const now = config.now ?? {};
+  const report = { lastfm: { user: now.lastfm || null, keySet: Boolean(env.LASTFM_API_KEY) }, twitch: {
+    login: now.twitch || null, clientIdSet: Boolean(env.TWITCH_CLIENT_ID), secretSet: Boolean(env.TWITCH_CLIENT_SECRET),
+  } };
+  if (now.lastfm && env.LASTFM_API_KEY) {
+    const started = Date.now();
+    try {
+      const params = new URLSearchParams({
+        method: "user.getrecenttracks", user: now.lastfm, api_key: env.LASTFM_API_KEY, format: "json", limit: "1",
+      });
+      const res = await fetch(`https://ws.audioscrobbler.com/2.0/?${params}`, { headers: { "user-agent": "mikubeam.de link page" } });
+      const text = await res.text();
+      report.lastfm.http = res.status;
+      report.lastfm.ms = Date.now() - started;
+      try {
+        const body = JSON.parse(text);
+        if (body.error) report.lastfm.apiError = { code: body.error, message: body.message };
+        const track = body.recenttracks?.track?.[0];
+        report.lastfm.totalScrobbles = body.recenttracks?.["@attr"]?.total ?? null;
+        if (track) {
+          report.lastfm.latest = {
+            name: track.name, artist: track.artist?.["#text"], nowPlaying: track["@attr"]?.nowplaying === "true",
+            playedAt: track.date?.uts ? new Date(Number(track.date.uts) * 1000).toISOString() : null,
+          };
+        }
+      } catch {
+        report.lastfm.body = text.slice(0, 200);
+      }
+    } catch (err) {
+      report.lastfm.fetchError = err.message;
+    }
+  }
+  if (now.twitch && env.TWITCH_CLIENT_ID && env.TWITCH_CLIENT_SECRET) {
+    try {
+      const params = new URLSearchParams({
+        client_id: env.TWITCH_CLIENT_ID, client_secret: env.TWITCH_CLIENT_SECRET, grant_type: "client_credentials",
+      });
+      const tokenRes = await fetch(`https://id.twitch.tv/oauth2/token?${params}`, { method: "POST" });
+      report.twitch.tokenHttp = tokenRes.status;
+      if (tokenRes.ok) {
+        const { access_token: token } = await tokenRes.json();
+        const res = await fetch(`https://api.twitch.tv/helix/streams?user_login=${encodeURIComponent(now.twitch)}`, {
+          headers: { "client-id": env.TWITCH_CLIENT_ID, authorization: `Bearer ${token}` },
+        });
+        report.twitch.streamsHttp = res.status;
+        if (res.ok) report.twitch.live = Boolean((await res.json()).data?.length);
+      } else {
+        report.twitch.tokenError = (await tokenRes.text()).slice(0, 200);
+      }
+    } catch (err) {
+      report.twitch.fetchError = err.message;
+    }
+  }
+  return report;
+}
+
 // /cover/<size>/<file>: album art from Last.fm, served through the worker so visitors' browsers
 // don't contact Last.fm themselves.
 export async function serveCover(path) {
