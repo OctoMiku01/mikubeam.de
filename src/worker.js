@@ -1,4 +1,9 @@
 import config from "../config.json";
+// Local copies of fonts, brand icons and avatar, written by scripts/assets.mjs at build time.
+import assets from "./generated/assets.json";
+
+// The avatar as served from mikubeam.de itself (falls back to the configured URL).
+const AVATAR = assets.avatar || config.avatar;
 import { getAllStats, linkRepo } from "./github.js";
 import { countVisit } from "./counter.js";
 import { getNow, serveCover } from "./now.js";
@@ -104,7 +109,7 @@ function renderIcon(icon, tint) {
   }
   // Brand icon from Simple Icons.
   const slug = icon.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return maskIcon(`https://cdn.simpleicons.org/${slug}`);
+  return maskIcon(assets.icons[slug] || `https://cdn.simpleicons.org/${slug}`);
 }
 
 function isExternal(url) {
@@ -335,10 +340,11 @@ function renderCounter(visitors, anim) {
 // "3 min ago", "2 h ago"
 function timeAgo(ms) {
   const minutes = Math.max(1, Math.round((Date.now() - ms) / 60000));
-  return minutes < 60 ? `${minutes} min ago` : `${Math.round(minutes / 60)} h ago`;
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `${hours} h ago` : `${Math.round(hours / 24)} d ago`;
 }
 
-const LAST_PLAYED_MAX_MS = 2 * 60 * 60 * 1000; // Show the last song only if it was this recent.
 
 // Inner HTML of the "right now" box; empty when there is nothing to show.
 function renderNow(now) {
@@ -352,9 +358,9 @@ function renderNow(now) {
         <span class="now-text"><span class="now-title">${esc(twitch.title)}</span><span class="now-sub">${esc(details)}</span></span>
       </a>`);
   }
-  const recent = music && (music.playing || (music.playedAt && Date.now() - music.playedAt < LAST_PLAYED_MAX_MS));
-  if (recent && music.name) {
-    const label = music.playing ? "Listening to" : `Last played · ${timeAgo(music.playedAt)}`;
+  // The current song, or otherwise the last one played – however long ago that was.
+  if (music?.name) {
+    const label = music.playing ? "Listening to" : music.playedAt ? `Last played · ${timeAgo(music.playedAt)}` : "Last played";
     rows.push(`<a class="now-row now-music${music.playing ? " playing" : ""}" href="${esc(safeUrl(music.url))}" target="_blank" rel="noopener noreferrer">
         ${music.cover ? `<img class="cover" src="${esc(music.cover)}" alt="" width="44" height="44" loading="lazy">` : `<span class="cover cover-empty">♪</span>`}
         <span class="now-text"><span class="now-label">${esc(label)}</span><span class="now-title">${esc(music.name)}</span><span class="now-sub">${esc(music.artist)}</span></span>
@@ -369,9 +375,8 @@ function homePage(c, stats, { visitors, now } = {}) {
   return {
     path: "/",
     loader: true,
-    retroFont: Boolean(c.counter),
     content: (anim) => `
-    ${c.avatar ? `<img class="avatar" src="${esc(safeUrl(c.avatar))}" alt="${esc(c.name)}" width="112" height="112"${anim("avatar")}>` : ""}
+    ${AVATAR ? `<img class="avatar" src="${esc(safeUrl(AVATAR))}" alt="${esc(c.name)}" width="112" height="112"${anim("avatar")}>` : ""}
     <h1${anim()}>${esc(c.name)}</h1>
     ${c.handle ? `<p class="handle"${anim()}>${esc(c.handle)}</p>` : ""}
     ${c.bio ? `<p class="bio"${anim()}>${bio}</p>` : ""}
@@ -468,7 +473,7 @@ function renderPage(c, origin, page) {
   // A dedicated meta.image is shown as a large banner, otherwise the avatar as a small thumbnail.
   const ogImage = meta.image
     ? `${meta.image}${meta.image.includes("?") ? "&" : "?"}v=${CONFIG_VERSION}`
-    : c.avatar;
+    : AVATAR;
   const font = theme.font && theme.font !== "system" ? theme.font : null;
   const animation = c.animation ?? {};
   const entrance = animation.entrance !== false;
@@ -493,11 +498,6 @@ function renderPage(c, origin, page) {
   // Color themes the visitor can switch between; the choice is remembered in their browser.
   const themes = (c.themes ?? []).filter((t) => t?.name && HEX_COLOR.test(t.accent ?? ""));
   const themeMap = Object.fromEntries(themes.map((t) => [t.name, [t.accent, inkFor(t.accent)]]));
-  const fontFamilies = [
-    font && `family=${encodeURIComponent(font)}:wght@400;500;600;700`,
-    page.retroFont && "family=VT323",
-  ].filter(Boolean);
-
   return `<!doctype html>
 <html lang="${esc(meta.lang || "de")}">
 <head>
@@ -518,9 +518,7 @@ function renderPage(c, origin, page) {
   <meta name="twitter:image" content="${esc(absoluteUrl(ogImage, origin))}">` : ""}
   <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  ${fontFamilies.length ? `<link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?${fontFamilies.join("&")}&display=swap">` : ""}
+  ${assets.fonts ? `<link rel="stylesheet" href="${esc(assets.fonts)}">` : ""}
   ${themes.length ? `<script>
     // Apply the saved color theme before the page is drawn, so it doesn't flash in the default color.
     try {
@@ -967,7 +965,7 @@ function renderPage(c, origin, page) {
 </head>
 <body class="${esc(bodyClasses)}">
   ${loader ? `<div class="loader" aria-hidden="true">
-    <div class="loader-ring">${c.avatar ? `<img src="${esc(safeUrl(c.avatar))}" alt="" onload="this.classList.add('loaded')">` : ""}</div>
+    <div class="loader-ring">${AVATAR ? `<img src="${esc(safeUrl(AVATAR))}" alt="" onload="this.classList.add('loaded')">` : ""}</div>
   </div>` : ""}
   ${themes.length > 1 ? `<div class="themes" role="group" aria-label="Color theme" hidden>
     ${themes.map((t) => `<button class="swatch" type="button" data-theme="${esc(t.name)}" style="--c:${css(t.accent)}" aria-label="${esc(t.name)}" title="${esc(t.name)}" aria-pressed="false"></button>`).join("\n    ")}

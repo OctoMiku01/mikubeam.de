@@ -3,10 +3,10 @@
   "name": "mikubeam-de",
   "main": "src/worker.js",
   "compatibility_date": "2026-10-01",
-  // Rebuilds public/banner.jpg from config.json before every `wrangler dev` and `wrangler deploy`
-  // (also on Cloudflare's automatic builds).
+  // Before every `wrangler dev` and `wrangler deploy` (also on Cloudflare's automatic builds):
+  // download fonts, brand icons and avatar into public/generated/, and rebuild public/banner.jpg.
   "build": {
-    "command": "node scripts/banner.mjs"
+    "command": "node scripts/assets.mjs && node scripts/banner.mjs"
   },
   // Visitor counter (D1 database created in the Cloudflare dashboard, Western Europe).
   // The table is created by the worker on first use; locally `wrangler dev` uses a local SQLite file.

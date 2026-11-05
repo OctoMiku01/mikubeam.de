@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "banner": "node scripts/banner.mjs"
+    "banner": "node scripts/banner.mjs",
+    "assets": "node scripts/assets.mjs"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

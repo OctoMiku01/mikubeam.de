@@ -57,7 +57,7 @@ Alternativ: Repo im Cloudflare-Dashboard unter *Workers & Pages → Create → I
 `"now": { "twitch": "<login>", "lastfm": "<benutzername>" }` zeigt unter den Social-Icons:
 
 - **Twitch:** roter LIVE-Button mit Titel, Spiel und Zuschauern, solange gestreamt wird. Braucht die Secrets `TWITCH_CLIENT_ID` und `TWITCH_CLIENT_SECRET` (App auf [dev.twitch.tv/console](https://dev.twitch.tv/console)).
-- **Last.fm:** „Listening to“ mit Cover, oder „Last played“, wenn der letzte Song höchstens 2 Stunden her ist. Braucht das Secret `LASTFM_API_KEY` ([API-Konto](https://www.last.fm/api/account/create)) und einen Scrobbler, z. B. die Browser-Erweiterung *Web Scrobbler* (YouTube Music im Browser) oder *Pano Scrobbler* (Android).
+- **Last.fm:** „Listening to“ mit Cover, sonst immer der zuletzt gehörte Song als „Last played · … ago“. Fehlt bei Last.fm ein Cover, sucht der Worker über Last.fm-Songinfos, iTunes und Deezer. Braucht das Secret `LASTFM_API_KEY` ([API-Konto](https://www.last.fm/api/account/create)) und einen Scrobbler, z. B. die Browser-Erweiterung *Web Scrobbler* (YouTube Music im Browser) oder *Pano Scrobbler* (Android).
 
 Fehlt ein Secret oder ist der Name leer, wird die Zeile einfach weggelassen. Twitch wird 60 s, Last.fm 30 s gecacht; die Seite lädt die Box alle 30 s über `/now` nach (pausiert, solange der Tab im Hintergrund ist). Cover laufen über `/cover/…` durch den Worker, damit Besucher nicht direkt Last.fm kontaktieren. Lokal kommen die Secrets in eine `.dev.vars`-Datei.
 
@@ -74,6 +74,10 @@ Zeigt ein Link auf ein GitHub-Repo (`https://github.com/Owner/Repo`), holt der W
 - Die Daten werden im Cloudflare-Cache gehalten und höchstens einmal pro Stunde im Hintergrund aktualisiert. Ist GitHub nicht erreichbar, bleiben die letzten Werte (bis zu 7 Tage) stehen, ganz ohne Daten wird die Zeile einfach weggelassen.
 - **Unterseite `/mods`:** Alle Links mit GitHub-Repo als Karten, gruppiert nach den Zwischenüberschriften aus `links`. Pro Mod: Beschreibung (aus der Config, sonst die Repo-Beschreibung), Downloads, Sterne, letztes Update, Lizenz und pro Minecraft-Version ein Download-Button direkt zur `.jar` des neuesten Releases (ohne `-sources`/`-javadoc`/`-dev`).
 - **Token (empfohlen):** Ohne Anmeldung erlaubt GitHub nur 60 Anfragen pro Stunde, und die teilen sich alle Worker auf derselben Cloudflare-IP. Einen [Fine-grained Token](https://github.com/settings/personal-access-tokens/new) mit „Public repositories (read-only)“ und ohne weitere Rechte anlegen und im Cloudflare-Dashboard unter *Worker → Settings → Variables and Secrets* als Secret `GITHUB_TOKEN` eintragen. Lokal geht das über eine `.dev.vars`-Datei mit `GITHUB_TOKEN=…`.
+
+### Keine externen Dienste
+
+Beim Build lädt [`scripts/assets.mjs`](scripts/assets.mjs) die Schrift (`theme.font` + Zähler-Schrift VT323) von Google Fonts, alle Marken-Icons von Simple Icons und einen Avatar mit `https://`-URL herunter und legt sie unter `public/generated/` ab (nicht im Repo). Die Seite verweist nur auf diese lokalen Kopien – Besucher kontaktieren also weder Google noch simpleicons.org oder GitHub. Album-Cover und alle API-Daten laufen ebenfalls über den Worker. Von Hand: `npm run assets`.
 
 ### Icons
 

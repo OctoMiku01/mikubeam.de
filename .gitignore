@@ -4,3 +4,7 @@ node_modules/
 
 # Generated from config.json by scripts/banner.mjs on every build
 public/banner.jpg
+
+# Downloaded at build time by scripts/assets.mjs
+public/generated/
+src/generated/
