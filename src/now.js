@@ -80,7 +80,7 @@ function lastfmImage(images) {
 
 // Artwork for a song Last.fm sent without one: Last.fm's track info first, then iTunes and Deezer,
 // and only if none of them knows the song, YouTube. Cached per song for a week, including
-// "nothing found". Returns { url, wide } – wide for 16:9 YouTube thumbnails.
+// "nothing found". Returns { url, wide } – wide marks a 16:9 YouTube thumbnail.
 async function findCover(artist, name, env) {
   const key = `cover3-${encodeURIComponent(`${artist}|${name}`.toLowerCase()).slice(0, 400)}`;
   return cached(key, COVER_TTL_S, async () => {
@@ -118,7 +118,8 @@ async function youtubeCover(artist, name, env) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const items = (await res.json()).items ?? [];
     const pick = items.find((i) => / - Topic$/.test(i.snippet?.channelTitle ?? "")) ?? items[0];
-    // "medium" is the full 16:9 thumbnail (320×180), shown uncropped.
+    // "medium" is the 16:9 thumbnail (320×180) without black bars; the page crops it to the
+    // center square, where a Topic upload has its album art.
     const url = pick?.snippet?.thumbnails?.medium?.url;
     return url && isCoverUrl(url) ? url : null;
   } catch (err) {
@@ -183,7 +184,6 @@ async function lastfmTrack(user, env, ctx) {
       artist,
       url: track.url,
       cover: coverPath(cover.url),
-      coverWide: Boolean(cover.url && cover.wide),
     };
   });
 }
