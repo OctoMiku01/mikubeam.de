@@ -8,6 +8,10 @@ import { getAllStats, linkRepo } from "./github.js";
 import { countVisit } from "./counter.js";
 import { getNow, getTopSongs, serveCover } from "./now.js";
 import { renderMarkdown } from "./markdown.js";
+import { privacyContent } from "./privacy.js";
+
+// Date shown under the privacy policy; update it whenever src/privacy.js changes.
+const PRIVACY_UPDATED = "5. November 2026";
 
 export default {
   async fetch(request, env, ctx) {
@@ -19,7 +23,9 @@ export default {
       ? homePage
       : pathname === "/mods" || pathname === "/mods/"
         ? modsPage
-        : null;
+        : pathname === "/datenschutz" || pathname === "/privacy"
+          ? privacyPage
+          : null;
     if (page) {
       // Only the start page counts visitors and shows the "right now" box; all lookups run at once.
       const isHome = page === homePage;
@@ -421,7 +427,7 @@ function homePage(c, stats, { visitors, now, topSongs } = {}) {
       ${(c.links ?? []).map((l) => renderLink(l, anim, stats)).join("\n      ")}
     </div>
     ${c.counter ? renderCounter(visitors, anim) : ""}
-    ${c.footer ? `<footer${anim()}>${esc(c.footer)}</footer>` : ""}`,
+    ${renderFooter(c, anim)}`,
   };
 }
 
@@ -481,6 +487,29 @@ function renderModCard(link, stats, anim) {
       </article>`;
 }
 
+// Footer on every page: the configured text plus the link to the privacy policy.
+function renderFooter(c, anim) {
+  const parts = [c.footer ? esc(c.footer) : "", '<a href="/datenschutz">Datenschutz</a>'].filter(Boolean);
+  return `<footer${anim()}>${parts.join('<span aria-hidden="true"> · </span>')}</footer>`;
+}
+
+// /datenschutz: the privacy policy (in German, as it follows German/EU law).
+function privacyPage(c) {
+  const name = c.meta?.title || c.name;
+  return {
+    path: "/datenschutz",
+    title: `Datenschutz · ${name}`,
+    description: `Datenschutzerklärung von ${c.meta?.siteName || name}`,
+    wide: true,
+    lang: "de",
+    content: (anim) => `
+    <a class="back" href="/"${anim()}>${renderIcon("arrow-left")}${esc(name)}</a>
+    <h1${anim()}>Datenschutzerklärung</h1>
+    <article class="legal"${anim()}>${privacyContent({ controller: c.privacy, esc, updated: PRIVACY_UPDATED })}</article>
+    ${renderFooter(c, anim)}`,
+  };
+}
+
 // /mods: every link that points to a GitHub repo, grouped by the headers from the config.
 function modsPage(c, stats) {
   const groups = [];
@@ -508,7 +537,7 @@ function modsPage(c, stats) {
     <div class="mods">
       ${g.mods.map((link) => renderModCard(link, stats[linkRepo(link)], anim)).join("\n      ")}
     </div>`).join("")}
-    ${c.footer ? `<footer${anim()}>${esc(c.footer)}</footer>` : ""}`,
+    ${renderFooter(c, anim)}`,
   };
 }
 
@@ -581,7 +610,7 @@ function renderPage(c, origin, page) {
   const themes = (c.themes ?? []).filter((t) => t?.name && HEX_COLOR.test(t.accent ?? ""));
   const themeMap = Object.fromEntries(themes.map((t) => [t.name, [t.accent, inkFor(t.accent)]]));
   return `<!doctype html>
-<html lang="${esc(meta.lang || "de")}">
+<html lang="${esc(page.lang || meta.lang || "de")}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -891,6 +920,31 @@ function renderPage(c, origin, page) {
     img.icon { object-fit: contain; border-radius: 4px; }
     a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     footer { margin-top: 40px; font-size: .8rem; opacity: .6; }
+    footer a { color: inherit; }
+    footer a:hover, footer a:focus-visible { color: var(--accent); }
+
+    /* Privacy policy */
+    .legal {
+      width: 100%;
+      margin-top: 12px;
+      padding: 8px 26px 20px;
+      border-radius: var(--radius);
+      text-align: left;
+      line-height: 1.6;
+      font-size: .95rem;
+      background: rgba(0, 0, 0, .35);
+      border: 1px solid rgba(255, 255, 255, .14);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      overflow-wrap: anywhere;
+    }
+    .legal h2 { margin: 24px 0 8px; font-size: 1.1rem; color: var(--accent); }
+    .legal p, .legal li { opacity: .92; }
+    .legal ul { padding-left: 22px; }
+    .legal li { margin: 6px 0; }
+    .legal a { color: var(--accent); }
+    .legal .updated { margin-top: 24px; font-size: .85rem; opacity: .65; }
+    @media (max-width: 480px) { .legal { padding: 4px 16px 16px; } }
 
     /* "Right now" box: Twitch live status and current song */
     .now { width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 22px; }

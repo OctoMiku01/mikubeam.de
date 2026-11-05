@@ -47,7 +47,8 @@ Alternativ: Repo im Cloudflare-Dashboard unter *Workers & Pages → Create → I
 | `background.dim` | Abdunkelung `0`–`1` für bessere Lesbarkeit |
 | `socials` | Icon-Reihe unter der Bio: `{ "icon", "url", "label" }` |
 | `links` | Buttons: `{ "label", "url", "icon", "description", "highlight" }` oder Zwischenüberschrift `{ "type": "header", "label" }` |
-| `footer` | Text ganz unten (optional) |
+| `footer` | Text ganz unten (optional); daneben steht immer der Link zur Datenschutzerklärung |
+| `privacy` | Verantwortlicher für die Datenschutzerklärung unter `/datenschutz`: `{ "name", "contact" }` (eine E-Mail-Adresse wird zum Link). Der Text steht in [`src/privacy.js`](src/privacy.js) und beschreibt, was die Seite technisch tut – bei neuen Funktionen, die Besucherdaten betreffen, mit anpassen (und `PRIVACY_UPDATED` in `src/worker.js`) |
 | `themes` | Farbwähler oben rechts: `[{ "name", "accent" }]`, der erste ist der Standard. Die Wahl merkt sich der Browser des Besuchers. Die Textfarbe auf Akzent-Buttons wird automatisch passend gewählt (dunkel auf Gelb) |
 | `easterEgg` | `true`: Konami-Code (↑ ↑ ↓ ↓ ← → ← → B A) oder dreimal schnell auf den Avatar klicken → Lauch-Regen mit kurzer Melodie (per Web Audio erzeugt, keine Sounddatei) |
 | `counter` | `true`: Besucherzähler im Retro-Stil auf der Startseite (siehe unten) |

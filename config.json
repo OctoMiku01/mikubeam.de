@@ -181,5 +181,9 @@
       "icon": "/icons/medal.png"
     }
   ],
-  "footer": "© mikubeam.de"
+  "footer": "© mikubeam.de",
+  "privacy": {
+    "name": "OctoMiku01",
+    "contact": "datenschutz@mikubeam.de"
+  }
 }
