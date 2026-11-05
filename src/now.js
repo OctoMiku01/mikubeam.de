@@ -4,7 +4,8 @@
 const CACHE = "https://cache.mikubeam.internal/now/";
 const TWITCH_TTL_S = 60;
 const LASTFM_TTL_S = 30;
-const TIMEOUT_MS = 1500;
+// Song list (~0.5 s) plus at most 1 s artwork search for a new song must fit in here.
+const TIMEOUT_MS = 2500;
 
 async function cached(key, ttl, load) {
   const cache = caches.default;
@@ -50,8 +51,54 @@ async function twitchStatus(login, env) {
   });
 }
 
-// Only album art from Last.fm's image server may be passed through /cover/.
-const COVER_HOST = "https://lastfm.freetls.fastly.net/i/u/";
+// Album art may only come from these image servers (Last.fm and Apple's iTunes CDN).
+const COVER_HOSTS = [/^lastfm\.freetls\.fastly\.net$/, /^is\d+-ssl\.mzstatic\.com$/];
+const isCoverUrl = (url) => {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && COVER_HOSTS.some((host) => host.test(u.hostname));
+  } catch {
+    return false;
+  }
+};
+// Last.fm's grey star placeholder, used when it has no real artwork.
+const LASTFM_PLACEHOLDER = "2a96cbd8b46e442fc41c2b86b821562f";
+const COVER_TTL_S = 7 * 24 * 60 * 60;
+const COVER_TIMEOUT_MS = 1000;
+
+function lastfmImage(images) {
+  const url = ["extralarge", "large", "medium"]
+    .map((size) => images?.find((i) => i.size === size)?.["#text"])
+    .find(Boolean);
+  return url && !url.includes(LASTFM_PLACEHOLDER) && isCoverUrl(url) ? url : null;
+}
+
+// Artwork for a song Last.fm sent without one: Last.fm's track info first, then the iTunes search.
+// Cached per song for a week, including "nothing found".
+async function findCover(artist, name, env) {
+  const key = `cover-${encodeURIComponent(`${artist}|${name}`.toLowerCase()).slice(0, 400)}`;
+  const { url } = await cached(key, COVER_TTL_S, async () => {
+    try {
+      const params = new URLSearchParams({
+        method: "track.getInfo", artist, track: name, api_key: env.LASTFM_API_KEY, format: "json", autocorrect: "1",
+      });
+      const res = await fetch(`https://ws.audioscrobbler.com/2.0/?${params}`, { headers: { "user-agent": "mikubeam.de link page" } });
+      const fromLastfm = res.ok ? lastfmImage((await res.json()).track?.album?.image) : null;
+      if (fromLastfm) return { url: fromLastfm };
+    } catch {}
+    try {
+      const params = new URLSearchParams({ term: `${artist} ${name}`, entity: "song", limit: "1", country: "JP" });
+      const res = await fetch(`https://itunes.apple.com/search?${params}`);
+      const art = res.ok ? (await res.json()).results?.[0]?.artworkUrl100 : null;
+      // artworkUrl100 is 100×100; the same URL with a different size gives a sharper image.
+      if (art && isCoverUrl(art)) return { url: art.replace(/\/100x100bb\./, "/300x300bb.") };
+    } catch {}
+    return { url: null };
+  });
+  return url;
+}
+
+const coverPath = (url) => (url ? `/cover?src=${encodeURIComponent(url)}` : null);
 
 async function lastfmTrack(user, env) {
   if (!user || !env.LASTFM_API_KEY) return null;
@@ -65,14 +112,17 @@ async function lastfmTrack(user, env) {
     if (!res.ok) throw new Error(`Last.fm: HTTP ${res.status}`);
     const track = (await res.json()).recenttracks?.track?.[0];
     if (!track) return { playing: false };
-    const image = track.image?.find((i) => i.size === "large")?.["#text"] || "";
+    const artist = track.artist?.["#text"] ?? "";
+    // A slow artwork search must not hold up the song itself.
+    const cover = lastfmImage(track.image)
+      ?? await Promise.race([findCover(artist, track.name, env).catch(() => null), timeout(COVER_TIMEOUT_MS)]);
     return {
       playing: track["@attr"]?.nowplaying === "true",
       playedAt: track.date?.uts ? Number(track.date.uts) * 1000 : null,
       name: track.name,
-      artist: track.artist?.["#text"] ?? "",
+      artist,
       url: track.url,
-      cover: image.startsWith(COVER_HOST) ? `/cover/${image.slice(COVER_HOST.length)}` : null,
+      cover: coverPath(cover),
     };
   });
 }
@@ -94,12 +144,14 @@ export async function getNow(config, env) {
   return { twitch, music };
 }
 
-// /cover/<size>/<file>: album art from Last.fm, served through the worker so visitors' browsers
-// don't contact Last.fm themselves.
-export async function serveCover(path) {
-  if (!/^[\w-]+\/[\w-]+\.(?:jpg|png|webp|gif)$/i.test(path)) return new Response("Not Found", { status: 404 });
-  const res = await fetch(COVER_HOST + path, { cf: { cacheTtl: 7 * 24 * 60 * 60, cacheEverything: true } });
-  if (!res.ok) return new Response("Not Found", { status: 404 });
+// /cover?src=<url>: album art served through the worker so visitors' browsers don't contact
+// Last.fm or Apple themselves. Only the allowed image servers and image responses pass.
+export async function serveCover(src) {
+  if (!src || !isCoverUrl(src)) return new Response("Not Found", { status: 404 });
+  const res = await fetch(src, { cf: { cacheTtl: COVER_TTL_S, cacheEverything: true } });
+  if (!res.ok || !/^image\//.test(res.headers.get("content-type") || "")) {
+    return new Response("Not Found", { status: 404 });
+  }
   return new Response(res.body, {
     headers: {
       "content-type": res.headers.get("content-type") || "image/jpeg",

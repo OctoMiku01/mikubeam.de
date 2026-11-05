@@ -41,8 +41,8 @@ export default {
         },
       });
     }
-    if (pathname.startsWith("/cover/")) {
-      return serveCover(pathname.slice("/cover/".length));
+    if (pathname === "/cover") {
+      return serveCover(new URL(request.url).searchParams.get("src"));
     }
     // Browsers and crawlers request /favicon.ico on their own; point them at the PNG.
     if (pathname === "/favicon.ico") {
