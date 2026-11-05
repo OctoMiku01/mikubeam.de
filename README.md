@@ -59,6 +59,8 @@ Alternativ: Repo im Cloudflare-Dashboard unter *Workers & Pages → Create → I
 - **Twitch:** roter LIVE-Button mit Titel, Spiel und Zuschauern, solange gestreamt wird. Braucht die Secrets `TWITCH_CLIENT_ID` und `TWITCH_CLIENT_SECRET` (App auf [dev.twitch.tv/console](https://dev.twitch.tv/console)).
 - **Last.fm:** „Listening to“ mit Cover, sonst immer der zuletzt gehörte Song als „Last played · … ago“. Fehlt bei Last.fm ein Cover, sucht der Worker über Last.fm-Songinfos, iTunes und Deezer und zuletzt – mit dem optionalen Secret `YOUTUBE_API_KEY` (YouTube Data API v3, ca. 100 Suchen/Tag frei) – auf YouTube, wo „Künstler – Topic“-Videos bevorzugt werden. YouTube-Vorschaubilder (16:9) werden auf das Quadrat in der Mitte zugeschnitten, wo bei Topic-Videos das Album-Cover sitzt. Braucht das Secret `LASTFM_API_KEY` ([API-Konto](https://www.last.fm/api/account/create)) und einen Scrobbler, z. B. die Browser-Erweiterung *Web Scrobbler* (YouTube Music im Browser) oder *Pano Scrobbler* (Android).
 
+- **Top-Songs:** `"topSongs": 5` (höchstens 10, `0` = aus) zeigt unten auf der Startseite „Top songs this week“ – die meistgehörten Songs der letzten 7 Tage von Last.fm mit Cover und Anzahl der Wiedergaben. Die Liste wird stündlich aktualisiert, die Cover kommen aus derselben Suche wie in der Box.
+
 Fehlt ein Secret oder ist der Name leer, wird die Zeile einfach weggelassen. Twitch wird 60 s, Last.fm 30 s gecacht; die Seite lädt die Box alle 30 s über `/now` nach (pausiert, solange der Tab im Hintergrund ist). Cover laufen über `/cover/…` durch den Worker, damit Besucher nicht direkt Last.fm kontaktieren. Lokal kommen die Secrets in eine `.dev.vars`-Datei.
 
 ### Besucherzähler

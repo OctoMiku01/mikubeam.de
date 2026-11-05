@@ -26,7 +26,8 @@
   "easterEgg": true,
   "now": {
     "twitch": "octomiku01",
-    "lastfm": "OctoMiku01"
+    "lastfm": "OctoMiku01",
+    "topSongs": 5
   },
   "counter": true,
   "animation": {

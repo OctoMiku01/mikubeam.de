@@ -6,7 +6,7 @@ import assets from "./generated/assets.json";
 const AVATAR = assets.avatar || config.avatar;
 import { getAllStats, linkRepo } from "./github.js";
 import { countVisit } from "./counter.js";
-import { getNow, serveCover } from "./now.js";
+import { getNow, getTopSongs, serveCover } from "./now.js";
 import { renderMarkdown } from "./markdown.js";
 
 export default {
@@ -23,12 +23,13 @@ export default {
     if (page) {
       // Only the start page counts visitors and shows the "right now" box; all lookups run at once.
       const isHome = page === homePage;
-      const [stats, visitors, now] = await Promise.all([
+      const [stats, visitors, now, topSongs] = await Promise.all([
         getAllStats(config.links ?? [], env, ctx),
         isHome && config.counter ? countVisit(request, env, ctx) : null,
         isHome && config.now ? getNow(config, env, ctx) : null,
+        isHome && config.now ? getTopSongs(config, env, ctx) : null,
       ]);
-      return new Response(renderPage(config, origin, page(config, stats, { visitors, now })), {
+      return new Response(renderPage(config, origin, page(config, stats, { visitors, now, topSongs })), {
         headers: {
           "content-type": "text/html; charset=utf-8",
           "cache-control": "public, max-age=300",
@@ -386,7 +387,21 @@ function renderNow(now) {
   return rows.join("\n      ");
 }
 
-function homePage(c, stats, { visitors, now } = {}) {
+// "Top songs this week": rank, cover, title, artist and play count, linked to Last.fm.
+function renderTopSongs(songs, anim) {
+  if (!songs?.length) return "";
+  return `<h2 class="section"${anim()}>Top songs this week</h2>
+    <ol class="top-songs"${anim()}>
+      ${songs.map((s, i) => `<li><a href="${esc(safeUrl(s.url))}" target="_blank" rel="noopener noreferrer">
+        <span class="rank">${i + 1}</span>
+        ${s.cover ? `<img class="cover" src="${esc(s.cover)}" alt="" width="40" height="40" loading="lazy">` : `<span class="cover cover-empty">♪</span>`}
+        <span class="now-text"><span class="now-title">${esc(s.name)}</span><span class="now-sub">${esc(s.artist)}</span></span>
+        <span class="plays" title="Plays in the last 7 days">${s.plays}×</span>
+      </a></li>`).join("\n      ")}
+    </ol>`;
+}
+
+function homePage(c, stats, { visitors, now, topSongs } = {}) {
   const bio = esc(c.bio).replace(/\n/g, "<br>");
   return {
     path: "/",
@@ -402,6 +417,7 @@ function homePage(c, stats, { visitors, now } = {}) {
     ${c.now ? `<div class="now" aria-live="polite"${anim()}>${renderNow(now)}</div>` : ""}
     <div class="links">
       ${(c.links ?? []).map((l) => renderLink(l, anim, stats)).join("\n      ")}
+      ${renderTopSongs(topSongs, anim)}
     </div>
     ${c.counter ? renderCounter(visitors, anim) : ""}
     ${c.footer ? `<footer${anim()}>${esc(c.footer)}</footer>` : ""}`,
@@ -926,6 +942,36 @@ function renderPage(c, origin, page) {
     @media (prefers-reduced-motion: reduce) {
       .live-dot, .eq i { animation: none; }
     }
+
+    /* Top songs this week */
+    .top-songs {
+      list-style: none;
+      margin: 0;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      border-radius: var(--radius);
+      background: rgba(0, 0, 0, .28);
+      border: 1px solid rgba(255, 255, 255, .14);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+    .top-songs a {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 10px;
+      border-radius: calc(var(--radius) - 6px);
+      color: var(--text);
+      text-decoration: none;
+      text-align: left;
+      transition: background-color .15s ease;
+    }
+    .top-songs a:hover, .top-songs a:focus-visible { background: rgba(255, 255, 255, .1); }
+    .top-songs .rank { width: 1.2em; text-align: center; font-weight: 800; color: var(--accent); flex: none; font-variant-numeric: tabular-nums; }
+    .top-songs .cover { width: 40px; height: 40px; }
+    .top-songs .plays { flex: none; font-size: .8rem; opacity: .7; font-variant-numeric: tabular-nums; }
 
     /* Retro visitor counter */
     .counter { margin-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 6px; }

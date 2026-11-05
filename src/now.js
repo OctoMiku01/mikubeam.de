@@ -188,6 +188,49 @@ async function lastfmTrack(user, env, ctx) {
   });
 }
 
+// Top songs of the last 7 days from Last.fm. The list is cached for an hour; covers come from the
+// same search as the "right now" box (cached per song), since Last.fm sends none for top tracks.
+const TOP_TTL_S = 60 * 60;
+
+export async function getTopSongs(config, env, ctx) {
+  const user = config.now?.lastfm;
+  const limit = Math.min(10, Math.max(0, Number(config.now?.topSongs ?? 0)));
+  if (!user || !limit || !env.LASTFM_API_KEY) return null;
+  try {
+    const loading = cached(`lastfm-top-${user.toLowerCase()}-${limit}`, TOP_TTL_S, async () => {
+        const params = new URLSearchParams({
+          method: "user.gettoptracks", user, period: "7day", limit: String(limit), api_key: env.LASTFM_API_KEY, format: "json",
+        });
+        const res = await fetch(`https://ws.audioscrobbler.com/2.0/?${params}`, { headers: { "user-agent": "mikubeam.de link page" } });
+        if (!res.ok) throw new Error(`Last.fm top tracks: HTTP ${res.status}`);
+        return ((await res.json()).toptracks?.track ?? []).map((t) => ({
+          name: t.name,
+          artist: t.artist?.name ?? "",
+          url: t.url,
+          plays: Number(t.playcount) || 0,
+          image: lastfmImage(t.image),
+        }));
+      });
+    // A slow first load still finishes in the background and fills the cache.
+    ctx?.waitUntil(loading.catch(() => {}));
+    const list = await Promise.race([loading, timeout(TIMEOUT_MS)]);
+    if (!list) return null;
+    // Covers in parallel; a slow search finishes in the background and shows up on a later visit.
+    return Promise.all(list.map(async (track) => {
+      let url = track.image;
+      if (!url) {
+        const search = findCover(track.artist, track.name, env).catch(() => null);
+        ctx?.waitUntil(search);
+        url = (await Promise.race([search, timeout(COVER_TIMEOUT_MS)]))?.url ?? null;
+      }
+      return { name: track.name, artist: track.artist, url: track.url, plays: track.plays, cover: coverPath(url) };
+    }));
+  } catch (err) {
+    console.warn(`Top songs: ${err.message}`);
+    return null;
+  }
+}
+
 const timeout = (ms) => new Promise((resolve) => setTimeout(() => resolve(null), ms));
 const safe = (promise, label) =>
   Promise.race([promise, timeout(TIMEOUT_MS)]).catch((err) => {
