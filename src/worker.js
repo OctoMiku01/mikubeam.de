@@ -6,16 +6,21 @@ import assets from "./generated/assets.json";
 const AVATAR = assets.avatar || config.avatar;
 import { getAllStats, linkRepo } from "./github.js";
 import { countVisit } from "./counter.js";
-import { getNow, getTopSongs, serveCover } from "./now.js";
+import { getNow, getTopSongs, lookupCover, serveCover } from "./now.js";
 import { renderMarkdown } from "./markdown.js";
 import { privacyContent } from "./privacy.js";
+import { fromDesktopProgram, savePresence } from "./presence.js";
 
 // Date shown under the privacy policy; update it whenever src/privacy.js changes.
-const PRIVACY_UPDATED = "5. November 2026";
+const PRIVACY_UPDATED = "21. November 2026";
 
 export default {
   async fetch(request, env, ctx) {
     const { pathname, origin } = new URL(request.url);
+    // Games from the owner's Discord status, sent by the desktop program discord-presence.
+    if (pathname === "/api/presence" && request.method === "POST") {
+      return savePresence(request, env);
+    }
     if (request.method !== "GET" && request.method !== "HEAD") {
       return new Response("Method Not Allowed", { status: 405 });
     }
@@ -65,6 +70,21 @@ export default {
           "x-content-type-options": "nosniff",
         },
       });
+    }
+    // Cover lookup for the desktop program (only with its token, so strangers can't use up the
+    // YouTube search quota).
+    if (pathname === "/api/cover") {
+      if (!(await fromDesktopProgram(request, env))) return new Response("Not Found", { status: 404 });
+      const params = new URL(request.url).searchParams;
+      const artist = (params.get("artist") || "").slice(0, 200);
+      const track = (params.get("track") || "").slice(0, 200);
+      if (!artist || !track) return new Response("Bad Request", { status: 400 });
+      try {
+        return Response.json(await lookupCover(artist, track, env), { headers: { "cache-control": "no-store" } });
+      } catch (err) {
+        // Search failed for now (not "no cover"): the program falls back to its own search.
+        return new Response(`Cover search failed: ${err.message}`, { status: 502 });
+      }
     }
     if (pathname === "/cover") {
       return serveCover(new URL(request.url).searchParams.get("src"));
@@ -367,17 +387,38 @@ function timeAgo(ms) {
 }
 
 
+// "25 min", "1 h 20 min"
+function duration(ms) {
+  const minutes = Math.max(1, Math.floor((Date.now() - ms) / 60000));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  return minutes % 60 ? `${hours} h ${minutes % 60} min` : `${hours} h`;
+}
+
 // Inner HTML of the "right now" box; empty when there is nothing to show.
 function renderNow(now) {
   if (!now) return "";
   const rows = [];
-  const { twitch, music } = now;
+  const { twitch, music, games } = now;
   if (twitch?.live) {
     const details = [twitch.game, `${compactNumber(twitch.viewers ?? 0)} watching`].filter(Boolean).join(" · ");
     rows.push(`<a class="now-row now-live" href="${esc(safeUrl(twitch.url))}" target="_blank" rel="noopener noreferrer">
         <span class="live-badge"><span class="live-dot"></span>LIVE</span>
         <span class="now-text"><span class="now-title">${esc(twitch.title)}</span><span class="now-sub">${esc(details)}</span></span>
       </a>`);
+  }
+  // Games from Discord; the one being streamed is already in the LIVE row.
+  const streamed = twitch?.live ? String(twitch.game ?? "").toLowerCase() : null;
+  for (const game of games ?? []) {
+    if (game.name.toLowerCase() === streamed) continue;
+    const label = game.start ? `Playing · ${duration(game.start)}` : "Playing";
+    const sub = [game.details, game.state].filter(Boolean).join(" · ");
+    rows.push(`<div class="now-row now-game">
+        ${game.icon
+          ? `<img class="cover" src="${esc(game.icon)}" alt="" width="44" height="44" loading="lazy">`
+          : `<span class="cover cover-empty">🎮</span>`}
+        <span class="now-text"><span class="now-label">${esc(label)}</span><span class="now-title">${esc(game.name)}</span>${sub ? `<span class="now-sub">${esc(sub)}</span>` : ""}</span>
+      </div>`);
   }
   // The current song, or otherwise the last one played – however long ago that was.
   if (music?.name) {
@@ -946,7 +987,7 @@ function renderPage(c, origin, page) {
     .legal .updated { margin-top: 24px; font-size: .85rem; opacity: .65; }
     @media (max-width: 480px) { .legal { padding: 4px 16px 16px; } }
 
-    /* "Right now" box: Twitch live status and current song */
+    /* "Right now" box: Twitch live status, games from Discord and current song */
     .now { width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 22px; }
     .now:empty { display: none; }
     .now-row {
@@ -965,6 +1006,7 @@ function renderPage(c, origin, page) {
       transition: transform .15s ease, border-color .15s ease;
     }
     .now-row:hover, .now-row:focus-visible { transform: scale(1.02); border-color: var(--accent); }
+    .now-game:hover { transform: none; border-color: rgba(255, 255, 255, .14); }
     .now-live { border-color: rgba(255, 70, 85, .7); }
     .now-live:hover, .now-live:focus-visible { border-color: #ff4655; }
     .now-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }

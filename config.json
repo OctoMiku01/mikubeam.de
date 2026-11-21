@@ -27,6 +27,7 @@
   "now": {
     "twitch": "octomiku01",
     "lastfm": "OctoMiku01",
+    "discord": true,
     "topSongs": 5
   },
   "counter": true,

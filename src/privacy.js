@@ -17,7 +17,7 @@ export function privacyContent({ controller, esc, updated }) {
     <ul>
       <li>Diese Website setzt <strong>keine Cookies</strong> und verwendet <strong>kein Tracking</strong> und keine Analyse-Werkzeuge.</li>
       <li>Ihr Browser lädt beim Besuch <strong>nur Dateien von mikubeam.de</strong>. Schriften, Icons und Bilder werden nicht von fremden Servern (z.&nbsp;B. Google) geladen.</li>
-      <li>Daten von anderen Diensten (GitHub, Last.fm, Twitch, Apple iTunes, Deezer, YouTube) ruft der Server ab. Dabei werden <strong>keine Daten über Sie</strong> an diese Dienste übermittelt.</li>
+      <li>Daten von anderen Diensten (GitHub, Last.fm, Twitch, Discord, Apple iTunes, Deezer, YouTube) ruft der Server ab. Dabei werden <strong>keine Daten über Sie</strong> an diese Dienste übermittelt.</li>
     </ul>
 
     <h2>3. Hosting durch Cloudflare</h2>
@@ -36,6 +36,7 @@ export function privacyContent({ controller, esc, updated }) {
       <li><strong>GitHub</strong> (GitHub, Inc., USA): Versionen, Downloads und Release-Notes der Projekte.</li>
       <li><strong>Last.fm</strong> (Last.fm Ltd., Großbritannien): welche Musik der Betreiber dieser Website hört.</li>
       <li><strong>Twitch</strong> (Twitch Interactive, Inc., USA): ob der Betreiber gerade streamt.</li>
+      <li><strong>Discord</strong> (Discord Inc., USA): welche Spiele der Betreiber gerade spielt, samt Spiele-Icons. Diese Angaben übermittelt ein Programm auf dem PC des Betreibers an den Server.</li>
       <li><strong>Apple iTunes, Deezer und YouTube</strong>: Album-Cover zu den angezeigten Songs.</li>
     </ul>
     <p>Diese Abrufe erfolgen durch den Server, nicht durch Ihren Browser. Ihre IP-Adresse oder andere Daten über Sie werden dabei nicht an diese Dienste übermittelt.</p>

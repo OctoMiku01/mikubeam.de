@@ -1,5 +1,8 @@
-// "Right now" box: live status from Twitch and the current song from Last.fm.
-// Both are cached briefly in the Cloudflare cache; a source without credentials is simply skipped.
+// "Right now" box: live status from Twitch, the current song from Last.fm and the games from the
+// owner's Discord status (see presence.js). Twitch and Last.fm are cached briefly in the Cloudflare
+// cache; a source without credentials is simply skipped.
+
+import { getGames } from "./presence.js";
 
 const CACHE = "https://cache.mikubeam.internal/now/";
 const TWITCH_TTL_S = 60;
@@ -51,12 +54,13 @@ async function twitchStatus(login, env) {
   });
 }
 
-// Album art may only come from these image servers (Last.fm and Apple's iTunes CDN).
+// Album art and game icons may only come from these image servers.
 const COVER_HOSTS = [
   /^lastfm\.freetls\.fastly\.net$/, // Last.fm
   /^is\d+-ssl\.mzstatic\.com$/, // iTunes
   /^cdn-images\.dzcdn\.net$/, /^e-cdns-images\.dzcdn\.net$/, // Deezer
   /^i\.ytimg\.com$/, // YouTube thumbnails
+  /^cdn\.discordapp\.com$/, /^media\.discordapp\.net$/, // Discord game icons
 ];
 const isCoverUrl = (url) => {
   try {
@@ -154,6 +158,11 @@ async function deezerCover(artist, name) {
   }
 }
 
+// Cover for the desktop program's Discord status (GET /api/cover): the same search and cache as
+// the "right now" box, so Discord and the site show the same picture. Returns the image server's
+// own URL, since Discord loads it itself. { url: null } = nothing found.
+export const lookupCover = (artist, name, env) => findCover(artist, name, env);
+
 const coverPath = (url) => (url ? `/cover?src=${encodeURIComponent(url)}` : null);
 
 async function lastfmTrack(user, env, ctx) {
@@ -238,14 +247,20 @@ const safe = (promise, label) =>
     return null;
   });
 
-// { twitch: {...} | null, music: {...} | null }
+async function discordGames(env) {
+  const games = await getGames(env);
+  return games?.map((g) => ({ ...g, icon: coverPath(g.icon) })) ?? null;
+}
+
+// { twitch: {...} | null, music: {...} | null, games: [...] | null }
 export async function getNow(config, env, ctx) {
   const now = config.now ?? {};
-  const [twitch, music] = await Promise.all([
+  const [twitch, music, games] = await Promise.all([
     safe(twitchStatus(now.twitch, env), "Twitch"),
     safe(lastfmTrack(now.lastfm, env, ctx), "Last.fm"),
+    now.discord ? safe(discordGames(env), "Discord") : null,
   ]);
-  return { twitch, music };
+  return { twitch, music, games };
 }
 
 // /cover?src=<url>: album art served through the worker so visitors' browsers don't contact
