@@ -427,7 +427,7 @@ function renderNow(now) {
   }
   // The current song, or otherwise the last one played – however long ago that was.
   if (music?.name) {
-    const label = music.playing ? "Listening to" : music.playedAt ? `Last played · ${timeAgo(music.playedAt)}` : "Last played";
+    const label = music.playing ? "Listening to" : music.playedAt ? `Last listened · ${timeAgo(music.playedAt)}` : "Last listened";
     rows.push(`<a class="now-row now-music${music.playing ? " playing" : ""}" href="${esc(safeUrl(music.url))}" target="_blank" rel="noopener noreferrer">
         ${music.cover
           // Square cover; 16:9 YouTube thumbnails are cropped to their center, where the album art sits.
