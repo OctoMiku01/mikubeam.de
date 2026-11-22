@@ -2,7 +2,8 @@
 // program discord-presence reads them through a Discord bot and sends them here
 // (POST /api/presence, secret PRESENCE_TOKEN). They are kept in D1 so every Cloudflare location
 // sees the same state. The program repeats them every minute; anything older counts as
-// "not playing" (PC off, program closed or Discord gone).
+// "not playing" (PC off, program closed or Discord gone). The last game that stopped is kept and
+// shown as "Last played", like the last song.
 
 const STALE_MS = 3 * 60 * 1000;
 const MAX_BODY = 8 * 1024;
@@ -87,14 +88,43 @@ export async function savePresence(request, env) {
   } catch {
     return new Response("Bad Request", { status: 400 });
   }
-  await run(env.DB, WRITE, JSON.stringify(clean(body)), Date.now());
+  const now = Date.now();
+  const data = clean(body);
+  // Remember the last game that stopped, for "Last played · 2 h ago" once nothing is played.
+  const prev = await run(env.DB, READ);
+  data.last = prev ? lastPlayed(JSON.parse(prev.data), prev.updated, now) : null;
+  const ended = prev ? endedGame(JSON.parse(prev.data), prev.updated, data.games, now) : null;
+  if (ended) data.last = ended;
+  await run(env.DB, WRITE, JSON.stringify(data), now);
   return new Response(null, { status: 204 });
 }
 
-// The games currently played, or [] when there is no recent update.
+const isStale = (updated, now) => now - updated > STALE_MS;
+// Only what "Last played" shows: what the game was, not where in it (state) or since when.
+const asLast = (game, endedAt) => ({ name: game.name, details: game.details, icon: game.icon, endedAt });
+
+// The stored "last played" game. Games of an update that went stale ended when it was sent.
+function lastPlayed(data, updated, now) {
+  if (isStale(updated, now) && data.games?.length) return asLast(data.games[0], updated);
+  return data.last ?? null;
+}
+
+// A game from the previous update that isn't played any more, or null.
+function endedGame(data, updated, games, now) {
+  const playing = new Set(games.map((g) => g.name));
+  const gone = (data.games ?? []).find((g) => !playing.has(g.name));
+  return gone ? asLast(gone, isStale(updated, now) ? updated : now) : null;
+}
+
+// { games: [...] (being played right now), last: {...} | null (the last game that stopped) }
 export async function getGames(env) {
   if (!env.PRESENCE_TOKEN || !env.DB) return null;
   const row = await run(env.DB, READ);
-  if (!row || Date.now() - row.updated > STALE_MS) return [];
-  return JSON.parse(row.data).games ?? [];
+  if (!row) return { games: [], last: null };
+  const data = JSON.parse(row.data);
+  const now = Date.now();
+  return {
+    games: isStale(row.updated, now) ? [] : data.games ?? [],
+    last: lastPlayed(data, row.updated, now),
+  };
 }

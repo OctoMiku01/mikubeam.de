@@ -247,12 +247,15 @@ const safe = (promise, label) =>
     return null;
   });
 
+// { games: [...], last: {...} | null } with icons served through /cover.
 async function discordGames(env) {
-  const games = await getGames(env);
-  return games?.map((g) => ({ ...g, icon: coverPath(g.icon) })) ?? null;
+  const result = await getGames(env);
+  if (!result) return null;
+  const withIcon = (g) => ({ ...g, icon: coverPath(g.icon) });
+  return { games: result.games.map(withIcon), last: result.last && withIcon(result.last) };
 }
 
-// { twitch: {...} | null, music: {...} | null, games: [...] | null }
+// { twitch: {...} | null, music: {...} | null, games: { games: [...], last: {...} | null } | null }
 export async function getNow(config, env, ctx) {
   const now = config.now ?? {};
   const [twitch, music, games] = await Promise.all([

@@ -407,18 +407,23 @@ function renderNow(now) {
         <span class="now-text"><span class="now-title">${esc(twitch.title)}</span><span class="now-sub">${esc(details)}</span></span>
       </a>`);
   }
-  // Games from Discord; the one being streamed is already in the LIVE row.
+  // Games from Discord; the one being streamed is already in the LIVE row. When nothing is played,
+  // the last game takes their place – like the last song, however long ago that was.
   const streamed = twitch?.live ? String(twitch.game ?? "").toLowerCase() : null;
-  for (const game of games ?? []) {
-    if (game.name.toLowerCase() === streamed) continue;
-    const label = game.start ? `Playing · ${duration(game.start)}` : "Playing";
-    const sub = [game.details, game.state].filter(Boolean).join(" · ");
-    rows.push(`<div class="now-row now-game">
+  const playing = (games?.games ?? []).filter((g) => g.name.toLowerCase() !== streamed);
+  const gameRow = (game, label, sub) => `<div class="now-row now-game">
         ${game.icon
           ? `<img class="cover" src="${esc(game.icon)}" alt="" width="44" height="44" loading="lazy">`
           : `<span class="cover cover-empty">🎮</span>`}
         <span class="now-text"><span class="now-label">${esc(label)}</span><span class="now-title">${esc(game.name)}</span>${sub ? `<span class="now-sub">${esc(sub)}</span>` : ""}</span>
-      </div>`);
+      </div>`;
+  for (const game of playing) {
+    const label = game.start ? `Playing · ${duration(game.start)}` : "Playing";
+    rows.push(gameRow(game, label, [game.details, game.state].filter(Boolean).join(" · ")));
+  }
+  const last = games?.last;
+  if (!playing.length && last?.name && !(games.games ?? []).length) {
+    rows.push(gameRow(last, last.endedAt ? `Last played · ${timeAgo(last.endedAt)}` : "Last played", last.details));
   }
   // The current song, or otherwise the last one played – however long ago that was.
   if (music?.name) {
